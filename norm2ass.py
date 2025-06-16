@@ -76,12 +76,15 @@ def process_norm2assV2(struc, pretime = 20, posttime = 20):
         elif item['type'] == 0 and 'start' not in item:
             try:
                 item_kdur = parse_time_to_hundredths(struc[i+1]['start']) - nowtime
-                asstxt += r'{\k'+str(item_kdur)+'}'
+                if item_kdur!=0: asstxt += r'{\k'+str(item_kdur)+'}'
                 nowtime = parse_time_to_hundredths(struc[i+1]['start'])
             except:
                 pass
             finally:
-                asstxt += item['orig']
+                if item['orig'] in (' ','　') and asstxt[-1] not in ('}',' ','　'):
+                    asstxt += r'{\k0}'+item['orig']
+                else:
+                    asstxt += item['orig']
         else:
             if 'start' in struc[i+1]:
                 item_kdur = parse_time_to_hundredths(struc[i+1]['start']) - parse_time_to_hundredths(item['start'])

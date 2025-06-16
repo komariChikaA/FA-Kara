@@ -18,7 +18,7 @@ def countdown_str_forward(starttime, bpm=60, num=4, symbol='●'):
     if isinstance(starttime, str):
         starttime = parse_time_to_hundredths(starttime)
     result = format_hundredths_to_time_str(starttime)
-    for i in range(1, num):
+    for i in range(1, num+1):
         result = format_hundredths_to_time_str(round(max(starttime-i*t,0))) + symbol + result
     return result
 
@@ -178,7 +178,7 @@ def process_rlf(result_list):
     while i < len(result_list):
         item = result_list[i]
 
-        if item['type'] in [1, 3] or item['type'] == 0 and 'start' in item and item['orig'] not in ('\n', ' ', '　'):
+        if item['type'] in [1, 3] or item['type'] == 0 and 'start' in item and item['orig'] not in ('\n', '', ' ', '　'):
             current_line += f"[1|{item['start'][1:-1]}]{item['orig']}"
             last_end = item['end']
         elif item['type'] == 2: # 不考虑加号
@@ -197,7 +197,7 @@ def process_rlf(result_list):
             current_line += f"[10|{item['start'][1:-1]}]{item['orig']}"
             last_end = None
         elif item['type'] == 0 and 'start' not in item:
-            if last_end and item['orig'] in ('\n', ' ', '　'):
+            if last_end and item['orig'] in ('\n', '', ' ', '　'):
                 current_line += f"[10|{last_end[1:-1]}]{item['orig']}"
                 last_end = None
             else:
