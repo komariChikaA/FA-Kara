@@ -8,6 +8,7 @@ import re
 import align
 # import ass2lrc
 import haruraw2norm as hn
+import lrcfmt
 import norm2ass
 from norm2lrc import *
 
@@ -47,6 +48,8 @@ if __name__=='__main__':
     parser.add_argument('--offset', type=int, default=-150, help='输出ruby歌词文件中Offset标签的偏移值')
     parser.add_argument('--bpm', type=float, default=60, help='歌曲的BPM，导唱指示灯用')
     parser.add_argument('--bpb', type=int, default=3, help='导唱指示灯的符号个数')
+    parser.add_argument('--lang', default='jaen', help='歌词语言')
+    parser.add_argument('-f', '--txt_format', default='hrh', help='歌词文本格式')
     args = parser.parse_args()
 
     sokuon_split = args.sokuon_split
@@ -62,6 +65,8 @@ if __name__=='__main__':
     ruby_tag_offset = args.offset
     bpm = args.bpm
     beats_per_bar = args.bpb
+    lrc_language = args.lang
+    txt_format = args.txt_format.lower()
     
     real_io_path = os.path.normpath(user_path) if os.path.isabs(user_path) else os.path.normpath(os.path.join(script_dir, user_path))
     input_text_path = os.path.normpath(os.path.join(real_io_path, user_text_path))
@@ -70,9 +75,16 @@ if __name__=='__main__':
     print('Loading files...')
     result_list = []
     with open(input_text_path, 'r', encoding='utf-8') as file:
+        if txt_format=='uta':
+            utat_str = ''
+            for line in file:
+                utat_str += line
+            file = lrcfmt.utat_process(utat_str)
         for line in file:
+            if txt_format=='moe':
+                line = lrcfmt.moeg_process(line)
             if line.strip():
-                result_list.extend(hn.process_haruhi_line(line, sokuon_split, hatsuon_split))
+                result_list.extend(hn.process_haruhi_line(line, lrc_language, sokuon_split, hatsuon_split))
     if result_list[-1]['orig']!='\n':
         result_list.append({'orig': '\n', 'type': 0, 'pron': ''})
 
@@ -80,7 +92,7 @@ if __name__=='__main__':
         for i in range(len(result_list)):
             if result_list[i]['type']==0:
                 try:
-                    if len(result_list[i-1]['pron'])>1 and result_list[i-1]['type']!=0:
+                    if result_list[i-1].get('pron') and result_list[i-1]['type']!=0:
                         pre_vowel = result_list[i-1]['pron'][-1]
                         post_consonant = ''
                         if i < len(result_list)-1:

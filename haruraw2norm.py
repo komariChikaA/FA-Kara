@@ -1,6 +1,7 @@
 from janome.tokenizer import Tokenizer
 import pykakasi
 import re
+import string
 
 kks = pykakasi.kakasi()
 tokenizer = Tokenizer()
@@ -8,6 +9,9 @@ tail_pron = '' # 'h'
 
 def is_english(text):
     return bool(re.match(r'^[a-zA-Z]+$', text))
+
+def is_english_punctuation(char):
+    return char in string.punctuation
 
 def is_kanji(char):
     return ('\u4E00' <= char <= '\u9FFF' or '\u3400' <= char <= '\u4DBF' or
@@ -31,7 +35,7 @@ def get_norm_ruby(item):
     if item['type'] == 3:
         return item['orig'].lower() if is_english(item['orig']) else item['orig']
     if item['type'] == 1:
-        return item['orig'].lower()
+        return ''.join([char for char in item['orig'].strip() if not is_english_punctuation(char)]).lower()
     return tail_pron
 
 def get_norm_surface(item):
@@ -123,7 +127,7 @@ def sylla_split(kana_str, sokuon_split=False, hatsuon_split=True):
             i += 1
     return kana_list
 
-def process_haruhi_line(line, sokuon_split=False, hatsuon_split=True):
+def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=True):
     # 使用正则表达式分割字符串，捕获{...}结构
     tokens = re.split(r'(\{.*?\})', line)
     result = []
@@ -154,11 +158,27 @@ def process_haruhi_line(line, sokuon_split=False, hatsuon_split=True):
         # 处理普通字符
         else:
             token = sylla_split(token, sokuon_split, hatsuon_split)
-            for char in token:
-                if is_kana(char) or is_english(char):
-                    result.append({'orig': char, 'type': 3})
-                else:
-                    result.append({'orig': char, 'type': 0})
+            if lang == 'ja':
+                for char in token:
+                    if is_kana(char) or is_english(char):
+                        result.append({'orig': char, 'type': 3})
+                    else:
+                        result.append({'orig': char, 'type': 0})
+            elif lang == 'jaen':
+                for char in token:
+                    if is_kana(char):
+                        result.append({'orig': char, 'type': 3})
+                    elif is_english(char) or is_english_punctuation(char):
+                        if result and result[-1].get('type')==1 and result[-1].get('orig')[-1]!=' ':
+                            result[-1]['orig'] += char
+                        elif is_english(char):
+                            result.append({'orig': char, 'type': 1})
+                        else:
+                            result.append({'orig': char, 'type': 0})
+                    elif char == ' ' and result and result[-1].get('type')==1:
+                        result[-1]['orig'] += char
+                    else:
+                        result.append({'orig': char, 'type': 0})
     
     # 标注单字罗马音
     postpron = None        
