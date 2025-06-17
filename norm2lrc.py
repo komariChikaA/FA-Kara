@@ -87,7 +87,7 @@ def process_main(result_list, tag_offset=-150, bpm=60, beats_per_bar=3):
         if ('start' in item and current_line == "" and item['type'] in [1, 2, 3]):
             current_start_time = parse_time_to_hundredths(item['start'])
 
-            if ((last_end_time and current_start_time - last_end_time > 6000/bpm*beats_per_bar+400) or
+            if bpm>0 and ((last_end_time and current_start_time - last_end_time > 6000/bpm*beats_per_bar+400) or
                 (last_end_time is None and current_start_time > 6000/bpm*beats_per_bar+100)):
                 current_line += countdown_str_forward(current_start_time, bpm, beats_per_bar)
 

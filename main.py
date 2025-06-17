@@ -65,7 +65,7 @@ if __name__=='__main__':
     ruby_tag_offset = args.offset
     bpm = args.bpm
     beats_per_bar = args.bpb
-    lrc_language = args.lang
+    lrc_language = args.lang.lower()
     txt_format = args.txt_format.lower()
     
     real_io_path = os.path.normpath(user_path) if os.path.isabs(user_path) else os.path.normpath(os.path.join(script_dir, user_path))
@@ -82,7 +82,7 @@ if __name__=='__main__':
             file = lrcfmt.utat_process(utat_str)
         for line in file:
             if txt_format=='moe':
-                line = lrcfmt.moeg_process(line)
+                line = lrcfmt.moeg_process_line(line)
             if line.strip():
                 result_list.extend(hn.process_haruhi_line(line, lrc_language, sokuon_split, hatsuon_split))
     if result_list[-1]['orig']!='\n':
