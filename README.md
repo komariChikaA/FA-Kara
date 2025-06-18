@@ -41,9 +41,9 @@ python main.py -v 0.5 -tl 0.2
 如果你从未接触过Python，可按照如下步骤配置环境：
 1. 安装[Python](https://www.python.org/)（推荐版本3.13），并配置好环境变量；
 2. 根据操作系统与GPU情况，安装对应的[PyTorch](https://pytorch.org/get-started/locally/)；
-3. 再安装其他库，如运行指令`pip install janome librosa pykakasi`。
+3. 再安装其他库，如运行指令`pip install janome librosa nltk pykakasi pyphen`。
 
 ## 模型简介
-主要使用librosa进行音频预处理，结合Janome、pykakasi标注歌词文本读音，输入基于PyTorch的[MMS_FA](https://arxiv.org/abs/2305.13516)进行推理。
+主要使用librosa进行音频预处理，结合Janome、pykakasi、NLTK、Pyphen标注歌词文本读音，输入基于PyTorch的[MMS_FA](https://arxiv.org/abs/2305.13516)进行推理。
 
 目前的效果尚不尽如人意，欢迎交流。

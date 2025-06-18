@@ -1,7 +1,10 @@
 from janome.tokenizer import Tokenizer
+import nltk
+from nltk.corpus import cmudict
 import pykakasi
+import pyphen
 import re
-import string
+# import string
 
 kks = pykakasi.kakasi()
 tokenizer = Tokenizer()
@@ -11,7 +14,7 @@ def is_english(text):
     return bool(re.match(r'^[a-zA-Z]+$', text))
 
 def is_english_punctuation(char):
-    return char in string.punctuation
+    return char == "'" # in string.punctuation
 
 def is_kanji(char):
     return ('\u4E00' <= char <= '\u9FFF' or '\u3400' <= char <= '\u4DBF' or
@@ -105,7 +108,6 @@ def min_error_split(target_list, s):
     # 反转结果（因为是从后往前回溯）
     return result[::-1]
 
-
 def sylla_split(kana_str, sokuon_split=False, hatsuon_split=True):
     kana_list = []
     i = 0
@@ -126,6 +128,132 @@ def sylla_split(kana_str, sokuon_split=False, hatsuon_split=True):
             kana_list.append(current_char)
             i += 1
     return kana_list
+
+def convert_phoneme(ph):
+    """去除音素中的重音标记并映射为罗马音"""
+    phoneme_map = {
+        'AA': 'a', 'AE': 'a', 'AH': 'a', 'AO': 'o', 'AW': 'au', 'AY': 'ai',
+        'B': 'b', 'CH': 'ch', 'D': 'd', 'DH': 'z', 'EH': 'e', 'ER': 'a',
+        'EY': 'ei', 'F': 'f', 'G': 'g', 'HH': 'h', 'IH': 'i', 'IY': 'i',
+        'JH': 'j', 'K': 'k', 'L': 'r', 'M': 'm', 'N': 'n', 'NG': 'ng',
+        'OW': 'o', 'OY': 'oi', 'P': 'p', 'R': 'r', 'S': 's', 'SH': 'sh',
+        'T': 't', 'TH': 's', 'UH': 'u', 'UW': 'u', 'V': 'v', 'W': 'w',
+        'Y': 'y', 'Z': 'z', 'ZH': 'j'
+    }
+    base_ph = ph.rstrip('012') # 移除数字重音标记
+    return phoneme_map.get(base_ph, '')
+
+def split_into_syllables_en(phonemes):
+    """将英语音素序列拆分为音节"""
+    vowels = ['AA', 'AE', 'AH', 'AO', 'AW', 'AY', 'EH', 'ER', 'EY', 
+              'IH', 'IY', 'OW', 'OY', 'UH', 'UW']
+    vowel_positions = []
+    # 识别元音位置
+    for i, ph in enumerate(phonemes):
+        base_ph = ph.rstrip('012')
+        if base_ph in vowels:
+            vowel_positions.append(i)
+    if not vowel_positions: return [phonemes]
+    
+    syllables = []
+    prev_vowel_idx = -1
+
+    # 按元音位置拆分音节
+    for i, vowel_idx in enumerate(vowel_positions):
+        if i == 0:
+            # 首个音节
+            onset = phonemes[:vowel_idx]
+            vowel = [phonemes[vowel_idx]]
+            syllables.append(onset + vowel)
+            prev_vowel_idx = vowel_idx
+        else:
+            # 获取两个元音之间的辅音序列
+            consonants = phonemes[prev_vowel_idx + 1 : vowel_idx]
+            if consonants:
+                onset_start = 0
+                # 最大节首辅音原则
+                if len(consonants) > 1:
+                    # 将第一个辅音分配给前一个音节
+                    syllables[-1].append(consonants[0])
+                    onset_start = 1
+                # 剩余辅音分配给后一个音节
+                onset = consonants[onset_start:]
+                vowel = [phonemes[vowel_idx]]
+                syllables.append(onset + vowel)
+            else:
+                # 没有辅音，直接开始新音节
+                syllables.append([phonemes[vowel_idx]])
+            prev_vowel_idx = vowel_idx
+    
+    # 添加尾部剩余辅音到最后一个音节
+    if prev_vowel_idx < len(phonemes) - 1:
+        trailing = phonemes[prev_vowel_idx + 1:]
+        syllables[-1].extend(trailing)
+    
+    return syllables
+
+def align_syllables_en(a, b):
+    """简单对齐表面音节和发音音节"""
+    if len(a) > len(b):
+        long_list, short_list = a, b
+        long_to_short = True
+    elif len(b) > len(a):
+        long_list, short_list = b, a
+        long_to_short = False
+    else:
+        return list(zip(a, b))
+    
+    print('Ignored errors when dealing with English pronunciation...')
+    n_segments = len(short_list)
+    total_elements = len(long_list)
+    
+    # 计算每段应包含的元素数
+    base_size = total_elements // n_segments
+    extra = total_elements % n_segments
+    
+    merged_list = []
+    start = 0
+    for i in range(n_segments):
+        seg_size = base_size + (1 if i < extra else 0) # 前 extra 段多一个元素
+        segment = long_list[start:start+seg_size]
+        merged = ''.join(segment)
+        merged_list.append(merged)
+        start += seg_size
+
+    if long_to_short:
+        return list(zip(merged_list, short_list))
+    else:
+        return list(zip(short_list, merged_list))
+
+def process_english_word(word):
+    if word=='a':
+        return [('a', 'a')]
+    elif word=='A':
+        return [('A', 'ei')]
+    try:
+        cmu_dict = cmudict.dict()
+    except LookupError:
+        nltk.download('cmudict')
+        cmu_dict = cmudict.dict()
+    eng_dic = pyphen.Pyphen(lang='en_US')
+
+    hyphenated = eng_dic.inserted(word)
+    surface_syllables = hyphenated.split('-')
+
+    word_lower = word.lower()
+    if word_lower not in cmu_dict:
+        direct_syllables = [i.replace("'", '').lower() for i in surface_syllables]
+        return list(zip(surface_syllables, direct_syllables))
+    
+    phonemes = cmu_dict[word_lower][0]
+    syllables_phonemes = split_into_syllables_en(phonemes)
+    syllables_romaji = []
+    for syl in syllables_phonemes:
+        romaji = ''.join(convert_phoneme(p) for p in syl)
+        syllables_romaji.append(romaji)
+    
+    # 对齐表面音节和发音音节
+    return align_syllables_en(surface_syllables, syllables_romaji)
 
 def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=True):
     # 使用正则表达式分割字符串，捕获{...}结构
@@ -169,34 +297,43 @@ def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=Tru
                     if is_kana(char):
                         result.append({'orig': char, 'type': 3})
                     elif is_english(char) or is_english_punctuation(char):
-                        if result and result[-1].get('type')==1 and result[-1].get('orig')[-1]!=' ':
+                        if result and result[-1].get('type')==1:
                             result[-1]['orig'] += char
                         elif is_english(char):
                             result.append({'orig': char, 'type': 1})
                         else:
                             result.append({'orig': char, 'type': 0})
-                    elif char == ' ' and result and result[-1].get('type')==1:
-                        result[-1]['orig'] += char
                     else:
                         result.append({'orig': char, 'type': 0})
     
+    # 英语分音节注音
+    new_list = []
+    for item in result:
+        if item.get('type')==1:
+            new_elements = get_norm_surface(item)
+            new_list.extend([{'orig': char, 'type': 1, 'pron': pron} for char, pron in process_english_word(new_elements)])
+        else:
+            new_list.append(item)
+    result = new_list
+
     # 标注单字罗马音
     postpron = None        
     for i in range(len(result)-1, -1, -1):
-        ruby_now = get_norm_ruby(result[i])
-        if result[i]['type']!=0 and ruby_now and ruby_now[-1] in ('っ', 'ッ'):
-            try:
-                pron = postpron[0]
-            except:
-                pron = tail_pron
+        if result[i].get('type')!=1:
+            ruby_now = get_norm_ruby(result[i])
+            if result[i].get('type')!=0 and ruby_now and ruby_now[-1] in ('っ', 'ッ'):
+                try:
+                    pron = postpron[0]
+                except:
+                    pron = tail_pron
+                else:
+                    if pron=='c': pron = 't'
+                finally:
+                    pron = kks.convert(ruby_now[:-1])[0]['hepburn'] + pron
             else:
-                if pron=='c': pron = 't'
-            finally:
-                pron = kks.convert(ruby_now[:-1])[0]['hepburn'] + pron
-        else:
-            pron = kks.convert(ruby_now)[0]['hepburn']
-        result[i]['pron'] = pron
-        postpron = pron
+                pron = kks.convert(ruby_now)[0]['hepburn']
+            result[i]['pron'] = pron
+        postpron = result[i]['pron']
     
     # 通用读音修正（は，へ）
     line_pron_list = [item['pron'] for item in result]
@@ -216,6 +353,6 @@ def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=Tru
     return result
 
 if __name__=='__main__':
-    input_string = "{阻|はば}むものは{無|な}い {身|み}{勝|かっ}{手|て}に"
+    input_string = "{阻|はば}むものは{無|な}い {身|み}{勝|かっ}{手|て}に More love, more jump!"
     parsed = process_haruhi_line(input_string)
     print(parsed)

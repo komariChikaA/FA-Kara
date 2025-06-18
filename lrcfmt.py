@@ -27,4 +27,5 @@ def utat_process(text):
         r'{\1|\2}', text
     )
     result = re.split(r'<br\s*/?>\s*', text)
+    result = [i+'\n' for i in result]
     return result

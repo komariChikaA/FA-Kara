@@ -32,7 +32,7 @@ def non_silent_recog(audio_file, sr = None, frame_second = 1, threspct = 10, thr
         segments.append((start, times[-1]))
     return segments
 
-if __name__=='__main__':
+def main():
     script_dir = os.path.dirname(os.path.realpath(__file__))
     parser = argparse.ArgumentParser(description='可选参数')
     parser.add_argument('-x', '--sokuon_split', type=int, default=0, help='是否将促音与前一字符拆开')
@@ -207,3 +207,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     # with open(os.path.join(real_io_path, 'o_hrh.lrc'), 'w', encoding='utf-8') as f:
     #     f.write(hrhlrc_output)
     print('Success!')
+
+if __name__=='__main__':
+    main()
