@@ -203,7 +203,7 @@ def align_syllables_en(a, b):
     else:
         return list(zip(a, b))
     
-    print('Ignored errors when dealing with English pronunciation...')
+    print("Ignored errors when dealing with the pronunciation of '"+''.join(a)+"'...")
     n_segments = len(short_list)
     total_elements = len(long_list)
     
@@ -242,6 +242,7 @@ def process_english_word(word):
 
     word_lower = word.lower()
     if word_lower not in cmu_dict:
+        print("Word '"+word+"' not in the dictionary...")
         direct_syllables = [i.replace("'", '').lower() for i in surface_syllables]
         return list(zip(surface_syllables, direct_syllables))
     

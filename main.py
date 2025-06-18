@@ -4,6 +4,7 @@ import librosa
 import numpy as np
 import os
 import re
+import time
 
 import align
 # import ass2lrc
@@ -33,6 +34,7 @@ def non_silent_recog(audio_file, sr = None, frame_second = 1, threspct = 10, thr
     return segments
 
 def main():
+    start_time = time.time()
     script_dir = os.path.dirname(os.path.realpath(__file__))
     parser = argparse.ArgumentParser(description='可选参数')
     parser.add_argument('-x', '--sokuon_split', type=int, default=0, help='是否将促音与前一字符拆开')
@@ -128,6 +130,9 @@ def main():
             continue
         else:
             print(f"alignment_tokens可能包含错误数据{item}")
+
+    end_time = time.time()
+    print("Lyrics text analysis executed in", round(end_time - start_time, 3), "seconds")
 
     audio_file, sr = librosa.load(input_audio_path, sr=None) 
     non_silent_ranges = non_silent_recog(audio_file, sr, silent_window_s, tail_thres_pct, tail_thres_ratio)

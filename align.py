@@ -3,8 +3,10 @@ import torchaudio
 import librosa
 import math
 import numpy as np
+import time
 
 def align_audio_with_text(audio_file_path, text_tokens, non_silent_ranges=[], sr=None, speed=1):
+    start_time = time.time()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     try:
@@ -107,6 +109,8 @@ def align_audio_with_text(audio_file_path, text_tokens, non_silent_ranges=[], sr
                 'original_end': original_end
             })
         
+        end_time = time.time()
+        print("Alignment inference executed in", round(end_time - start_time, 3), "seconds")
         return results
 
     except Exception as e:
