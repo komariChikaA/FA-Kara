@@ -10,6 +10,22 @@ kks = pykakasi.kakasi()
 tokenizer = Tokenizer()
 tail_pron = '' # 'h'
 
+phoneme_map = {
+    'AA': 'a', 'AE': 'a', 'AH': 'a', 'AO': 'o', 'AW': 'au', 'AY': 'ai',
+    'B': 'b', 'CH': 'ch', 'D': 'd', 'DH': 'z', 'EH': 'e', 'ER': 'a',
+    'EY': 'ei', 'F': 'f', 'G': 'g', 'HH': 'h', 'IH': 'i', 'IY': 'i',
+    'JH': 'j', 'K': 'k', 'L': 'r', 'M': 'm', 'N': 'n', 'NG': 'ng',
+    'OW': 'o', 'OY': 'oi', 'P': 'p', 'R': 'r', 'S': 's', 'SH': 'sh',
+    'T': 't', 'TH': 's', 'UH': 'u', 'UW': 'u', 'V': 'v', 'W': 'w',
+    'Y': 'y', 'Z': 'z', 'ZH': 'j'
+}
+try:
+    cmu_dict = cmudict.dict()
+except LookupError:
+    nltk.download('cmudict')
+    cmu_dict = cmudict.dict()
+eng_dic = pyphen.Pyphen(lang='en_US')
+
 def is_english(text):
     return bool(re.match(r'^[a-zA-Z]+$', text))
 
@@ -131,15 +147,6 @@ def sylla_split(kana_str, sokuon_split=False, hatsuon_split=True):
 
 def convert_phoneme(ph):
     """去除音素中的重音标记并映射为罗马音"""
-    phoneme_map = {
-        'AA': 'a', 'AE': 'a', 'AH': 'a', 'AO': 'o', 'AW': 'au', 'AY': 'ai',
-        'B': 'b', 'CH': 'ch', 'D': 'd', 'DH': 'z', 'EH': 'e', 'ER': 'a',
-        'EY': 'ei', 'F': 'f', 'G': 'g', 'HH': 'h', 'IH': 'i', 'IY': 'i',
-        'JH': 'j', 'K': 'k', 'L': 'r', 'M': 'm', 'N': 'n', 'NG': 'ng',
-        'OW': 'o', 'OY': 'oi', 'P': 'p', 'R': 'r', 'S': 's', 'SH': 'sh',
-        'T': 't', 'TH': 's', 'UH': 'u', 'UW': 'u', 'V': 'v', 'W': 'w',
-        'Y': 'y', 'Z': 'z', 'ZH': 'j'
-    }
     base_ph = ph.rstrip('012') # 移除数字重音标记
     return phoneme_map.get(base_ph, '')
 
@@ -214,7 +221,7 @@ def align_syllables_en(a, b):
     merged_list = []
     start = 0
     for i in range(n_segments):
-        seg_size = base_size + (1 if i < extra else 0) # 前 extra 段多一个元素
+        seg_size = base_size + (1 if i >= n_segments-extra else 0) # 后 extra 段多一个元素
         segment = long_list[start:start+seg_size]
         merged = ''.join(segment)
         merged_list.append(merged)
@@ -230,17 +237,13 @@ def process_english_word(word):
         return [('a', 'a')]
     elif word=='A':
         return [('A', 'ei')]
-    try:
-        cmu_dict = cmudict.dict()
-    except LookupError:
-        nltk.download('cmudict')
-        cmu_dict = cmudict.dict()
-    eng_dic = pyphen.Pyphen(lang='en_US')
 
     hyphenated = eng_dic.inserted(word)
     surface_syllables = hyphenated.split('-')
 
     word_lower = word.lower()
+    # if word_lower=='you':
+    #     return [(word, 'iyu')]
     if word_lower not in cmu_dict:
         print("Word '"+word+"' not in the dictionary...")
         direct_syllables = [i.replace("'", '').lower() for i in surface_syllables]
@@ -250,7 +253,7 @@ def process_english_word(word):
     syllables_phonemes = split_into_syllables_en(phonemes)
     syllables_romaji = []
     for syl in syllables_phonemes:
-        romaji = ''.join(convert_phoneme(p) for p in syl)
+        romaji = ''.join(convert_phoneme(p) for p in syl) # p.rstrip('012').lower()
         syllables_romaji.append(romaji)
     
     # 对齐表面音节和发音音节

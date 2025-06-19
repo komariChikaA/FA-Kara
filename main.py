@@ -71,6 +71,8 @@ def main():
     txt_format = args.txt_format.lower()
     
     real_io_path = os.path.normpath(user_path) if os.path.isabs(user_path) else os.path.normpath(os.path.join(script_dir, user_path))
+    if not os.path.exists(real_io_path):
+        os.makedirs(real_io_path)
     input_text_path = os.path.normpath(os.path.join(real_io_path, user_text_path))
     input_audio_path = os.path.normpath(os.path.join(real_io_path, user_audio_path))
 
@@ -142,7 +144,10 @@ def main():
         alignment_results = align.align_audio_with_text(audio_file, alignment_tokens, non_silent_ranges, sr)
     else:
         print('Changing the audio speed...')
+        start_time = time.time()
         y_processed = librosa.effects.time_stretch(audio_file, rate=audio_speed)
+        end_time = time.time()
+        print("Audio speed changing executed in", round(end_time - start_time, 3), "seconds")
         print('Adding timelines...')
         alignment_results = align.align_audio_with_text(y_processed, alignment_tokens, non_silent_ranges, sr, audio_speed)
 
