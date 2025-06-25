@@ -84,14 +84,14 @@ def process_main(result_list, tag_offset=-150, bpm=60, beats_per_bar=3):
     while i < len(result_list):
         item = result_list[i]
 
-        if ('start' in item and current_line == "" and item['type'] in [1, 2, 3]):
+        if ('start' in item and current_line == "" and item['type'] in [1, 2, 3, 4]):
             current_start_time = parse_time_to_hundredths(item['start'])
 
             if bpm>0 and ((last_end_time and current_start_time - last_end_time > 6000/bpm*beats_per_bar+400) or
                 (last_end_time is None and current_start_time > 6000/bpm*beats_per_bar+100)):
                 current_line += countdown_str_forward(current_start_time, bpm, beats_per_bar)
 
-        if item['type'] in [1, 3] or item['type'] == 0 and item['orig']!='\n' and 'start' in item:
+        if item['type'] in [1, 3, 4] or item['type'] == 0 and item['orig']!='\n' and 'start' in item:
             current_line += f"{item['start']}{item['orig']}"
             last_end = item['end']
         elif item['type'] == 2:
@@ -178,7 +178,7 @@ def process_rlf(result_list):
     while i < len(result_list):
         item = result_list[i]
 
-        if item['type'] in [1, 3] or item['type'] == 0 and 'start' in item and item['orig'] not in ('\n', '', ' ', '　'):
+        if item['type'] in [1, 3, 4] or item['type'] == 0 and 'start' in item and item['orig'] not in ('\n', '', ' ', '　'):
             current_line += f"[1|{item['start'][1:-1]}]{item['orig']}"
             last_end = item['end']
         elif item['type'] == 2: # 不考虑加号

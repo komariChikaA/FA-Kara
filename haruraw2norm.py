@@ -26,6 +26,93 @@ except LookupError:
     cmu_dict = cmudict.dict()
 eng_dic = pyphen.Pyphen(lang='en_US')
 
+def normalize_numbers(text):
+    """将字符串中的各种数字字符转换为半角阿拉伯数字"""
+    # 全角数字转半角
+    fullwidth_to_half = str.maketrans('０１２３４５６７８９', '0123456789')
+    text = text.translate(fullwidth_to_half)
+    
+    # 特殊数字转换映射表
+    number_map = {
+        # 分数
+        '½': '0.5', '⅓': '0.333', '⅔': '0.666', '¼': '0.25', '¾': '0.75',
+        '⅕': '0.2', '⅖': '0.4', '⅗': '0.6', '⅘': '0.8', '⅙': '0.166',
+        '⅚': '0.833', '⅛': '0.125', '⅜': '0.375', '⅝': '0.625', '⅞': '0.875',
+        # 罗马数字
+        'Ⅰ': '1', 'Ⅱ': '2', 'Ⅲ': '3', 'Ⅳ': '4', 'Ⅴ': '5',
+        'Ⅵ': '6', 'Ⅶ': '7', 'Ⅷ': '8', 'Ⅸ': '9', 'Ⅹ': '10',
+        'Ⅺ': '11', 'Ⅻ': '12', 'Ⅼ': '50', 'Ⅽ': '100', 'Ⅾ': '500', 'Ⅿ': '1000',
+        # 汉字数字
+        '零': '0', '一': '1', '二': '2', '三': '3', '四': '4', '五': '5',
+        '六': '6', '七': '7', '八': '8', '九': '9', '十': '10', '百': '100',
+        '千': '1000', '万': '10000', '亿': '100000000',
+        # 上标/下标
+        '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+        '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9'
+    }
+    
+    # 构建转换表
+    trans_table = str.maketrans(number_map)
+    return text.translate(trans_table)
+
+def number_to_english(number_str):
+    """将数字字符串转换为英文单词"""
+    try:
+        if '.' in number_str:
+            num = float(number_str)
+        else:
+            num = int(number_str)
+    except ValueError:
+        print('Unable to process number "'+number_str+'"...')
+        return tail_pron
+    
+    ones = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+            "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+            "seventeen", "eighteen", "nineteen"]
+    tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+    
+    if isinstance(num, float):
+        integer_part = int(num)
+        decimal_part = round(num - integer_part, 3)
+        integer_words = number_to_english(str(integer_part)) if integer_part > 0 else ""
+        
+        # 处理小数部分
+        decimal_str = f"{decimal_part:.3f}"[2:] # 获取小数点后三位
+        decimal_words = " point"
+        for digit in decimal_str:
+            if digit == '0' and not decimal_words.endswith(' zero'):
+                decimal_words += " zero"
+            elif digit != '0':
+                decimal_words += " " + ones[int(digit)]
+        return (integer_words + decimal_words).strip()
+    
+    if num < 0:
+        return "minus " + number_to_english(str(abs(num)))
+    
+    if num < 20:
+        return ones[num]
+    
+    if num < 100:
+        return tens[num // 10] + ((" " + ones[num % 10]) if num % 10 != 0 else "")
+    
+    if num < 1000:
+        return ones[num // 100] + " hundred" + (" and " + number_to_english(str(num % 100)) if num % 100 != 0 else "")
+    
+    # 处理1000及以上
+    scales = [
+        (10**12, "trillion"),
+        (10**9, "billion"),
+        (10**6, "million"),
+        (10**3, "thousand")
+    ]
+    
+    for scale_value, scale_name in scales:
+        if num >= scale_value:
+            return number_to_english(str(num // scale_value)) + " " + scale_name + (" " + number_to_english(str(num % scale_value)) if num % scale_value != 0 else "")
+    
+    print('Unable to process number "'+number_str+'"...')
+    return tail_pron
+
 def is_english(text):
     return bool(re.match(r'^[a-zA-Z]+$', text))
 
@@ -49,6 +136,7 @@ def is_kana(char):
     return True
 
 def get_norm_ruby(item):
+    # 1:英文, 2:注音结构, 3:假名, 4:数字
     if item['type'] == 2:
         return item['ruby']
     if item['type'] == 3:
@@ -58,7 +146,7 @@ def get_norm_ruby(item):
     return tail_pron
 
 def get_norm_surface(item):
-    if item['type'] in (1,2,3):
+    if item['type'] in (1,2,3,4):
         return item['orig']
     return ''
 
@@ -232,7 +320,7 @@ def align_syllables_en(a, b):
     else:
         return list(zip(short_list, merged_list))
 
-def process_english_word(word):
+def process_english_word(word, surf=True):
     if word=='a':
         return [('a', 'a')]
     elif word=='A':
@@ -256,6 +344,9 @@ def process_english_word(word):
         romaji = ''.join(convert_phoneme(p) for p in syl) # p.rstrip('012').lower()
         syllables_romaji.append(romaji)
     
+    if not surf:
+        return ''.join(syllables_romaji)
+
     # 对齐表面音节和发音音节
     return align_syllables_en(surface_syllables, syllables_romaji)
 
@@ -294,6 +385,8 @@ def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=Tru
                 for char in token:
                     if is_kana(char) or is_english(char):
                         result.append({'orig': char, 'type': 3})
+                    # elif char.isdigit(): # isnumeric
+                    #     result.append({'orig': char, 'type': 4})
                     else:
                         result.append({'orig': char, 'type': 0})
             elif lang == 'jaen':
@@ -307,15 +400,23 @@ def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=Tru
                             result.append({'orig': char, 'type': 1})
                         else:
                             result.append({'orig': char, 'type': 0})
+                    elif char.isdigit():
+                        if result and result[-1].get('type')==4:
+                            result[-1]['orig'] += char
+                        else:
+                            result.append({'orig': char, 'type': 4})
                     else:
                         result.append({'orig': char, 'type': 0})
     
-    # 英语分音节注音
+    # 英语分音节注音、数字注音
     new_list = []
     for item in result:
         if item.get('type')==1:
             new_elements = get_norm_surface(item)
             new_list.extend([{'orig': char, 'type': 1, 'pron': pron} for char, pron in process_english_word(new_elements)])
+        elif item.get('type')==4:
+            en_nums = number_to_english(get_norm_surface(item)).split(' ')
+            new_list.append({'orig': get_norm_surface(item), 'type': 4, 'pron': ''.join([process_english_word(i, surf=False) for i in en_nums])})
         else:
             new_list.append(item)
     result = new_list
@@ -323,7 +424,7 @@ def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=Tru
     # 标注单字罗马音
     postpron = None        
     for i in range(len(result)-1, -1, -1):
-        if result[i].get('type')!=1:
+        if result[i].get('type') in (0, 2, 3):
             ruby_now = get_norm_ruby(result[i])
             if result[i].get('type')!=0 and ruby_now and ruby_now[-1] in ('っ', 'ッ'):
                 try:

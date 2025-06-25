@@ -81,7 +81,7 @@ def process_norm2assV2(struc, pretime = 20, posttime = 20):
             except:
                 pass
             finally:
-                if item['orig'] in (' ','　') and asstxt[-1] not in ('}',' ','　'):
+                if item['orig'] in (' ','　') and asstxt[-1] not in ('}',' ','　') or struc[i-1].get('type')==2:
                     asstxt += r'{\k0}'+item['orig']
                 else:
                     asstxt += item['orig']
