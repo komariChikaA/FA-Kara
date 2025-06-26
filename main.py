@@ -52,6 +52,7 @@ def main():
     parser.add_argument('--bpb', type=int, default=3, help='导唱指示灯的符号个数')
     parser.add_argument('--lang', default='jaen', help='歌词语言')
     parser.add_argument('-f', '--txt_format', default='hrh', help='歌词文本格式')
+    parser.add_argument('-cl', '--characters_per_line', type=int, default=0, help='输出文件每行最大字数')
     args = parser.parse_args()
 
     sokuon_split = args.sokuon_split
@@ -69,6 +70,7 @@ def main():
     beats_per_bar = args.bpb
     lrc_language = args.lang.lower()
     txt_format = args.txt_format.lower()
+    output_characters_per_line = args.characters_per_line
     
     real_io_path = os.path.normpath(user_path) if os.path.isabs(user_path) else os.path.normpath(os.path.join(script_dir, user_path))
     if not os.path.exists(real_io_path):
@@ -186,7 +188,10 @@ def main():
                             break
                     if interval_covered:
                         result_list[i]['end'] = format_hundredths_to_time_str(max(next_start-2, current_end))
-                
+    
+    if output_characters_per_line > 0:
+        split_long_segments(result_list, max_length=output_characters_per_line)
+
     main_output = process_main(result_list, ruby_tag_offset, bpm, beats_per_bar)
     ruby_output = process_ruby(result_list)
     content = f"{main_output}\n{ruby_output}"

@@ -1,5 +1,6 @@
 import numpy as np
 import re
+import unicodedata
 
 def parse_time_to_hundredths(time_str):
     match = re.match(r'\[(\d{2}):(\d{2}):(\d{2})\]', time_str)
@@ -12,6 +13,16 @@ def format_hundredths_to_time_str(total_hundredths):
     seconds = remaining // 100
     hundredths = remaining % 100
     return f"[{minutes:02d}:{seconds:02d}:{hundredths:02d}]"
+
+def calculate_length(surface):
+    "结合全半角计算字符串的长度"
+    length = 0.0
+    for char in surface:
+        if unicodedata.east_asian_width(char) in ('F', 'W', 'A'):
+            length += 1
+        else:
+            length += 0.5
+    return length
 
 def countdown_str_forward(starttime, bpm=60, num=4, symbol='●'):
     t = 6000 / bpm
@@ -73,7 +84,47 @@ def non_silent_head_adjust(result_list, non_silent_ranges):
                     adjust_target = min(parse_time_to_hundredths(result_list[inds]['end']), adjust_target)
                     result_list[inds]['start'] = format_hundredths_to_time_str(adjust_target)
         return result_list
+
+def split_long_segments(elements, max_length=20):
+    """
+    处理元素列表，确保每两个换行符之间的长度不超过max_length；
+    如果超过，则寻找最合适的空格替换为换行符。
+    会直接replace!
+    """
+    start_index = 0
+    current_length = 0.0
+    space_positions = [] # 记录空格位置和该位置之前的长度
+    
+    for i in range(len(elements) + 1):
+        if i == len(elements) or elements[i].get('type') == 0 and elements[i].get('orig') == '\n':
+            if current_length > max_length and space_positions:
+                # 从后往前寻找最接近max_length的空格
+                best_position = None
+                for pos, length_before in reversed(space_positions):
+                    if length_before <= max_length:
+                        best_position = pos
+                        break
+                
+                if best_position is None:
+                    best_position = space_positions[0][0]
+                elements[best_position]['orig'] = '\n'
+                
+                start_index = best_position + 1 # 从分割点之后开始
+                current_length = 0.0
+                space_positions = []
+            else:
+                start_index = i + 1 if i < len(elements) else i
+                current_length = 0.0
+                space_positions = []
         
+        elif i < len(elements):
+            elem = elements[i]
+            surface = elem.get('orig')
+            elem_length = calculate_length(surface)
+            if surface in (' ', '　') and elem.get('type') == 0:
+                space_positions.append((i, current_length)) # 记录空格位置和该位置前的长度
+            current_length += elem_length
+
 def process_main(result_list, tag_offset=-150, bpm=60, beats_per_bar=3):
     result = []
     current_line = ""
