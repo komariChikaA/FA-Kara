@@ -26,6 +26,10 @@ except LookupError:
     cmu_dict = cmudict.dict()
 eng_dic = pyphen.Pyphen(lang='en_US')
 
+newnums = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩',
+           '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳',
+           '㉑', '㉒', '㉓', '㉔', '㉕', '㉖', '㉗', '㉘', '㉙', '㉚']
+
 def normalize_numbers(text):
     """将字符串中的各种数字字符转换为半角阿拉伯数字"""
     # 全角数字转半角
@@ -134,6 +138,12 @@ def is_kana(char):
         if not is_hiragana(i) and not is_katakana(i) or i in ['・', '゠']: # , 'ー'
             return False
     return True
+
+def is_number(char):
+    # 目前支持判断单个字符
+    if char in newnums:
+        return False
+    return char.isdigit() # isnumeric
 
 def get_norm_ruby(item):
     # 1:英文, 2:注音结构, 3:假名, 4:数字
@@ -385,7 +395,7 @@ def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=Tru
                 for char in token:
                     if is_kana(char) or is_english(char):
                         result.append({'orig': char, 'type': 3})
-                    # elif char.isdigit(): # isnumeric
+                    # elif is_number(char):
                     #     result.append({'orig': char, 'type': 4})
                     else:
                         result.append({'orig': char, 'type': 0})
@@ -400,7 +410,7 @@ def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=Tru
                             result.append({'orig': char, 'type': 1})
                         else:
                             result.append({'orig': char, 'type': 0})
-                    elif char.isdigit():
+                    elif is_number(char):
                         if result and result[-1].get('type')==4:
                             result[-1]['orig'] += char
                         else:

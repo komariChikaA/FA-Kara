@@ -1,5 +1,9 @@
 import re
 
+newnums = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩',
+           '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳',
+           '㉑', '㉒', '㉓', '㉔', '㉕', '㉖', '㉗', '㉘', '㉙', '㉚']
+
 def int2asstime(cs: int) -> str:
     '厘秒整数转换为.ass时轴信息'
     hours = cs // 360000
@@ -51,7 +55,7 @@ def process_norm2assV2(struc, pretime = 20, posttime = 20):
     '仿NicokaraMaker.lrc时值'
     result = ''
     starttime = nowtime = None
-    asstxt = r'{\k'+str(pretime)+'}'
+    asstxt = ''
     i = 0
     while i < len(struc):
         item = struc[i]
@@ -70,23 +74,38 @@ def process_norm2assV2(struc, pretime = 20, posttime = 20):
                 pass
             finally:
                 endtime = nowtime + posttime
-                result += 'Dialogue: 0,'+int2asstime(starttime)+','+int2asstime(endtime)+r',Default,,0,0,0,karaoke,'+asstxt+r'{\k'+str(posttime)+'}'+'\n'
+                if asstxt:
+                    if asstxt[0] not in ['{'] + newnums: 
+                        asstxt = r'{\k0}' + asstxt
+                    if asstxt[0] in newnums and asstxt[1] != '{':
+                        asstxt = asstxt[0] + r'{\k0}' + asstxt[1:]
+                result += 'Dialogue: 0,'+int2asstime(starttime)+','+int2asstime(endtime)+r',Default,,0,0,0,karaoke,' \
+                    +r'{\k'+str(pretime)+'}'+asstxt+r'{\k'+str(posttime)+'}'+'\n'
                 starttime = nowtime = None
-                asstxt = r'{\k'+str(pretime)+'}'
+                asstxt = ''
         elif item['type'] == 0 and 'start' not in item:
-            try:
-                item_kdur = parse_time_to_hundredths(struc[i+1]['start']) - nowtime
-                if item_kdur!=0: asstxt += r'{\k'+str(item_kdur)+'}'
-                nowtime = parse_time_to_hundredths(struc[i+1]['start'])
-            except:
-                pass
-            finally:
-                if item['orig'] in (' ','　') and asstxt[-1] not in ('}',' ','　') or struc[i-1].get('type')==2:
-                    asstxt += r'{\k0}'+item['orig']
-                else:
-                    asstxt += item['orig']
+            if struc[i-1].get('type') in (1,3,4) and item.get('orig') not in [' ','　']+newnums:
+                asstxt += item['orig']
+            # elif struc[i-1].get('type') == 2 and item.get('orig') not in [' ','　']+newnums:
+            #     asstxt += r'{\k0}' + item['orig']
+            else:
+                zero_str = item.get('orig')
+                while True:
+                    if struc[i+1].get('orig') == '\n':
+                        item_kdur = 0
+                        break
+                    if struc[i+1].get('start'):
+                        if nowtime:
+                            item_kdur = parse_time_to_hundredths(struc[i+1]['start']) - nowtime
+                        else:
+                            item_kdur = 0
+                        nowtime = parse_time_to_hundredths(struc[i+1]['start'])
+                        break
+                    zero_str += struc[i+1].get('orig')
+                    i += 1
+                asstxt += r'{\k'+str(item_kdur)+'}' + zero_str
         else:
-            if 'start' in struc[i+1]:
+            if struc[i+1].get('start'):
                 item_kdur = parse_time_to_hundredths(struc[i+1]['start']) - parse_time_to_hundredths(item['start'])
                 nowtime = parse_time_to_hundredths(struc[i+1]['start'])
             else:
