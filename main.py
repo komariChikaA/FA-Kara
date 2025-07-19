@@ -41,7 +41,7 @@ def main():
     parser.add_argument('-n', '--hatsuon_split', type=int, default=1, help='是否将拨音与前一字符拆开')
     parser.add_argument('-v', '--audio_speedx', type=float, default=1, help='推理时使用的音频倍速')
     parser.add_argument('-p', '--path_io', default='', help='输入输出文件目录。基于主文件所在目录，支持绝对路径或相对路径')
-    parser.add_argument('-ia', '--input_audio', default='i.wav', help='输入音频文件名')
+    parser.add_argument('-ia', '--input_audio', default=None, help='输入音频文件名')
     parser.add_argument('-it', '--input_text', default='i.txt', help='输入歌词文件名')
     parser.add_argument('-t', '--tail_correct', type=int, default=3, help='尾音拖长选项。建议取默认值3')
     parser.add_argument('-tl', '--tail_limit_window', type=float, default=0.8, help='全曲静音检测窗口时长，单位：秒')
@@ -76,7 +76,12 @@ def main():
     if not os.path.exists(real_io_path):
         os.makedirs(real_io_path)
     input_text_path = os.path.normpath(os.path.join(real_io_path, user_text_path))
-    input_audio_path = os.path.normpath(os.path.join(real_io_path, user_audio_path))
+    if user_audio_path:
+        input_audio_path = os.path.normpath(os.path.join(real_io_path, user_audio_path))
+    elif os.path.exists(os.path.normpath(os.path.join(real_io_path, 'i.wav'))):
+        input_audio_path = os.path.normpath(os.path.join(real_io_path, 'i.wav'))
+    else:
+        input_audio_path = os.path.normpath(os.path.join(real_io_path, 'i.mp3'))
 
     print('Loading files...')
     result_list = []
