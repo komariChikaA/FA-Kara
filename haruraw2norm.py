@@ -440,7 +440,7 @@ def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=Tru
                 try:
                     pron = postpron[0]
                 except:
-                    pron = tail_pron
+                    pron = 'h' # tail_pron
                 else:
                     if pron=='c': pron = 't'
                 finally:
