@@ -3,6 +3,8 @@ import nltk
 from nltk.corpus import cmudict
 import pykakasi
 import pyphen
+import pypinyin
+from pypinyin import pinyin, Style
 import re
 # import string
 
@@ -18,6 +20,28 @@ phoneme_map = {
     'OW': 'o', 'OY': 'oi', 'P': 'p', 'R': 'r', 'S': 's', 'SH': 'sh',
     'T': 't', 'TH': 's', 'UH': 'u', 'UW': 'u', 'V': 'v', 'W': 'w',
     'Y': 'y', 'Z': 'z', 'ZH': 'j'
+}
+PINYIN_TO_PHONETIC = {
+    # 声母
+    'b': 'b', 'p': 'p', 'm': 'm', 'f': 'f',
+    'd': 'd', 't': 't', 'n': 'n', 'l': 'r',
+    'g': 'g', 'k': 'k', 'h': 'h',
+    'j': 'j', 'q': 'ch', 'x': 'sh',
+    'zh': 'j', 'ch': 'ch', 'sh': 'sh', 'r': 'r',
+    'z': 'z', 'c': 'ts', 's': 's',
+    'y': 'y', 'w': 'w',
+    
+    # 韵母
+    'a': 'a', 'o': 'o', 'e': 'e', 'i': 'i', 'u': 'u', 'ü': 'yu',
+    'ai': 'ai', 'ei': 'ei', 'ao': 'ao', 'ou': 'ou',
+    'an': 'an', 'en': 'en', 'ang': 'ang', 'eng': 'eng', 'ong': 'ong',
+    'ia': 'ya', 'ie': 'ye', 'iao': 'yao', 'iu': 'yu', 
+    'ian': 'yan', 'in': 'in', 'iang': 'yang', 'ing': 'ing', 'iong': 'yong',
+    'ua': 'wa', 'uo': 'wo', 'uai': 'wai', 'ui': 'wei',
+    'uan': 'wan', 'un': 'wen', 'uang': 'wang', 'ueng': 'weng',
+    'üe': 'yue', 'üan': 'yuan', 'ün': 'yun',
+    
+    'er': 'a', 'io': 'yo', 'o': 'wo', 'e': 'e'
 }
 try:
     cmu_dict = cmudict.dict()
@@ -146,17 +170,17 @@ def is_number(char):
     return char.isdigit() # isnumeric
 
 def get_norm_ruby(item):
-    # 1:英文, 2:注音结构, 3:假名, 4:数字
+    # 1:英文, 2:注音结构, 3:假名, 4:数字, 5:中文, 6:隐藏注音
     if item['type'] == 2:
         return item['ruby']
-    if item['type'] == 3:
+    if item['type'] in (3, 5):
         return item['orig'].lower() if is_english(item['orig']) else item['orig']
     if item['type'] == 1:
         return ''.join([char for char in item['orig'].strip() if not is_english_punctuation(char)]).lower()
     return tail_pron
 
 def get_norm_surface(item):
-    if item['type'] in (1,2,3,4):
+    if item['type'] in (1,2,3,4,5):
         return item['orig']
     return ''
 
@@ -360,110 +384,210 @@ def process_english_word(word, surf=True):
     # 对齐表面音节和发音音节
     return align_syllables_en(surface_syllables, syllables_romaji)
 
-def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=True):
-    # 使用正则表达式分割字符串，捕获{...}结构
-    tokens = re.split(r'(\{.*?\})', line)
-    result = []
+def convert_pinyin_to_phonetic(pinyin_str):
+    """将拼音转换为表音拼写，赞美AI"""
+    # 移除音调数字
+    pinyin_str = re.sub(r'[1-5]', '', pinyin_str)
     
-    for token in tokens:
-        if not token:
-            continue    
-        # 处理振假名结构 {漢字|假名}
-        if token.startswith('{') and token.endswith('}'):
-            content = token[1:-1]
-            parts = content.split('|')
-            assert len(parts) == 2, f"注音格式错误：{token}"
-            kanji, ruby_text = parts
-            ruby_text = sylla_split(ruby_text, sokuon_split, hatsuon_split)
-            assert len(ruby_text)>=1, "振假名为空"
-            result.append({
-                'orig': kanji,
-                'type': 2,
-                'ruby': ruby_text[0]
-            })
-            if len(ruby_text)>=2:
-                for i in range(1, len(ruby_text)):
-                    result.append({
-                        'orig': '',
-                        'type': 2,
-                        'ruby': ruby_text[i]
-                    })        
-        # 处理普通字符
-        else:
-            token = sylla_split(token, sokuon_split, hatsuon_split)
-            if lang == 'ja':
-                for char in token:
-                    if is_kana(char) or is_english(char):
-                        result.append({'orig': char, 'type': 3})
-                    # elif is_number(char):
-                    #     result.append({'orig': char, 'type': 4})
-                    else:
-                        result.append({'orig': char, 'type': 0})
-            elif lang == 'jaen':
-                for char in token:
-                    if is_kana(char):
-                        result.append({'orig': char, 'type': 3})
-                    elif is_english(char) or is_english_punctuation(char):
-                        if result and result[-1].get('type')==1:
-                            result[-1]['orig'] += char
-                        elif is_english(char):
-                            result.append({'orig': char, 'type': 1})
+    # 特殊整体音节处理
+    special_cases = {
+        'zhi': 'jru', 'chi': 'chu', 'shi': 'shu', 'ri': 'ru',
+        'zi': 'zu', 'ci': 'tsu', 'si': 'su',
+        'yi': 'i', 'wu': 'u', 'yu': 'yu',
+        'ye': 'ye', 'yue': 'yue', 'yuan': 'yuen',
+        'yin': 'in', 'yun': 'yun', 'ying': 'ing'
+    }
+    
+    if pinyin_str in special_cases:
+        return special_cases[pinyin_str]
+    
+    # 分离声母和韵母
+    initials = ['b', 'p', 'm', 'f', 'd', 't', 'n', 'l', 'g', 'k', 'h', 
+                'j', 'q', 'x', 'zh', 'ch', 'sh', 'r', 'z', 'c', 's', 'y', 'w']
+    
+    # 找出最长的匹配声母
+    found_initial = ""
+    for initial in sorted(initials, key=len, reverse=True):
+        if pinyin_str.startswith(initial):
+            found_initial = initial
+            break
+    
+    # 获取韵母部分
+    final = pinyin_str[len(found_initial):] if found_initial else pinyin_str
+    
+    # 转换声母和韵母
+    phonetic_initial = PINYIN_TO_PHONETIC.get(found_initial, found_initial)
+    phonetic_final = PINYIN_TO_PHONETIC.get(final, final)
+    
+    # 特殊规则处理
+    # 1. i/u/ü 开头的韵母前没有声母时，添加y/w
+    if not found_initial:
+        if final.startswith('i'):
+            phonetic_final = 'y' + phonetic_final
+        elif final.startswith('u'):
+            phonetic_final = 'w' + phonetic_final
+        elif final.startswith('ü'):
+            phonetic_final = 'yu' + phonetic_final[2:] if len(phonetic_final) > 2 else 'yu'
+    
+    # 2. j/q/x 后的 ü 去掉两点
+    if found_initial in ['j', 'q', 'x'] and final.startswith('ü'):
+        phonetic_final = 'u' + phonetic_final[2:] if len(phonetic_final) > 2 else 'u'
+    
+    # 组合声母和韵母
+    return phonetic_initial + phonetic_final
+
+def hanzi_to_phonetic(text, heteronym=False):
+    """将汉字文本转换为表音拼写，可以结合语义处理句子但目前只用来处理单字"""
+    # 获取拼音
+    pinyin_list = pinyin(text, style=Style.TONE3, heteronym=heteronym)
+    
+    result = []
+    for item in pinyin_list:
+        if not item: # 非汉字字符
+            result.append("")
+            continue
+            
+        # 处理多音字
+        pronunciations = []
+        for py in item:
+            phonetic_form = convert_pinyin_to_phonetic(py)
+            pronunciations.append(phonetic_form)
+        
+        # 去重并选择第一个发音
+        unique_prons = list(dict.fromkeys(pronunciations))
+        result.append(unique_prons[0])
+    return result
+
+def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=True):
+
+    def haruhi_eng_pron_func(result_list):
+        # 英语分音节注音、数字注音
+        new_list = []
+        for item in result_list:
+            if item.get('type')==1:
+                new_elements = get_norm_surface(item)
+                new_list.extend([{'orig': char, 'type': 1, 'pron': pron} for char, pron in process_english_word(new_elements)])
+            elif item.get('type')==4:
+                en_nums = number_to_english(get_norm_surface(item)).split(' ')
+                new_list.append({'orig': get_norm_surface(item), 'type': 4, 'pron': ''.join([process_english_word(i, surf=False) for i in en_nums])})
+            else:
+                new_list.append(item)
+        return new_list
+
+    result = []
+    if lang in ['ja', 'jaen']:
+        tokens = re.split(r'(\{.*?\})', line)
+        
+        for token in tokens:
+            if not token:
+                continue    
+            # 处理振假名结构 {漢字|假名}
+            if token.startswith('{') and token.endswith('}'):
+                content = token[1:-1]
+                parts = content.split('|')
+                assert len(parts) == 2, f"注音格式错误：{token}"
+                kanji, ruby_text = parts
+                ruby_text = sylla_split(ruby_text, sokuon_split, hatsuon_split)
+                assert len(ruby_text)>=1, "振假名为空"
+                result.append({
+                    'orig': kanji,
+                    'type': 2,
+                    'ruby': ruby_text[0]
+                })
+                if len(ruby_text)>=2:
+                    for i in range(1, len(ruby_text)):
+                        result.append({
+                            'orig': '',
+                            'type': 2,
+                            'ruby': ruby_text[i]
+                        })        
+            # 处理普通字符
+            else:
+                token = sylla_split(token, sokuon_split, hatsuon_split)
+                if lang == 'ja':
+                    for char in token:
+                        if is_kana(char) or is_english(char):
+                            result.append({'orig': char, 'type': 3})
+                        # elif is_number(char):
+                        #     result.append({'orig': char, 'type': 4})
                         else:
                             result.append({'orig': char, 'type': 0})
-                    elif is_number(char):
-                        if result and result[-1].get('type')==4:
-                            result[-1]['orig'] += char
+                elif lang == 'jaen':
+                    for char in token:
+                        if is_kana(char):
+                            result.append({'orig': char, 'type': 3})
+                        elif is_english(char) or is_english_punctuation(char):
+                            if result and result[-1].get('type')==1:
+                                result[-1]['orig'] += char
+                            elif is_english(char):
+                                result.append({'orig': char, 'type': 1})
+                            else:
+                                result.append({'orig': char, 'type': 0})
+                        elif is_number(char):
+                            if result and result[-1].get('type')==4:
+                                result[-1]['orig'] += char
+                            else:
+                                result.append({'orig': char, 'type': 4})
                         else:
-                            result.append({'orig': char, 'type': 4})
-                    else:
-                        result.append({'orig': char, 'type': 0})
-    
-    # 英语分音节注音、数字注音
-    new_list = []
-    for item in result:
-        if item.get('type')==1:
-            new_elements = get_norm_surface(item)
-            new_list.extend([{'orig': char, 'type': 1, 'pron': pron} for char, pron in process_english_word(new_elements)])
-        elif item.get('type')==4:
-            en_nums = number_to_english(get_norm_surface(item)).split(' ')
-            new_list.append({'orig': get_norm_surface(item), 'type': 4, 'pron': ''.join([process_english_word(i, surf=False) for i in en_nums])})
-        else:
-            new_list.append(item)
-    result = new_list
+                            result.append({'orig': char, 'type': 0})
+        
+        # 英语分音节注音、数字注音
+        result = haruhi_eng_pron_func(result)
 
-    # 标注单字罗马音
-    postpron = None        
-    for i in range(len(result)-1, -1, -1):
-        if result[i].get('type') in (0, 2, 3):
-            ruby_now = get_norm_ruby(result[i])
-            if result[i].get('type')!=0 and ruby_now and ruby_now[-1] in ('っ', 'ッ'):
-                try:
-                    pron = postpron[0]
-                except:
-                    pron = 'h' # tail_pron
+        # 标注单字罗马音
+        postpron = None        
+        for i in range(len(result)-1, -1, -1):
+            if result[i].get('type') in (0, 2, 3):
+                ruby_now = get_norm_ruby(result[i])
+                if result[i].get('type')!=0 and ruby_now and ruby_now[-1] in ('っ', 'ッ'):
+                    try:
+                        pron = postpron[0]
+                    except:
+                        pron = 'h' # tail_pron
+                    else:
+                        if pron=='c': pron = 't'
+                    finally:
+                        pron = kks.convert(ruby_now[:-1])[0]['hepburn'] + pron
                 else:
-                    if pron=='c': pron = 't'
-                finally:
-                    pron = kks.convert(ruby_now[:-1])[0]['hepburn'] + pron
+                    pron = kks.convert(ruby_now)[0]['hepburn']
+                result[i]['pron'] = pron
+            postpron = result[i]['pron']
+        
+        # 通用读音修正（は，へ）
+        line_pron_list = [item['pron'] for item in result]
+        line_surface = ''.join([get_norm_surface(i) for i in result])
+        line_roma = ''.join([i['hepburn'] for i in kks.convert(''.join([token.phonetic for token in tokenizer.tokenize(line_surface)]))])
+        line_roma_proc = min_error_split(line_pron_list, line_roma)
+        for i in range(len(result)):
+            if result[i]['type']==3:
+                try:
+                    if result[i]['orig']=='は' and line_roma_proc[i]=='wa':
+                        result[i]['pron'] = 'wa'
+                    elif result[i]['orig']=='へ' and line_roma_proc[i]=='e':
+                        result[i]['pron'] = 'e'
+                except:
+                    print('Ignored errors when trying to correct ha and he...')
+    else: # zhen
+        for char in line:
+            if is_kanji(char):
+                result.append({'orig': char, 'type': 5, 'pron': hanzi_to_phonetic(char)[0]})
+            elif is_english(char) or is_english_punctuation(char):
+                if result and result[-1].get('type')==1:
+                    result[-1]['orig'] += char
+                elif is_english(char):
+                    result.append({'orig': char, 'type': 1})
+                else:
+                    result.append({'orig': char, 'type': 0})
+            elif is_number(char):
+                if result and result[-1].get('type')==4:
+                    result[-1]['orig'] += char
+                else:
+                    result.append({'orig': char, 'type': 4})
             else:
-                pron = kks.convert(ruby_now)[0]['hepburn']
-            result[i]['pron'] = pron
-        postpron = result[i]['pron']
-    
-    # 通用读音修正（は，へ）
-    line_pron_list = [item['pron'] for item in result]
-    line_surface = ''.join([get_norm_surface(i) for i in result])
-    line_roma = ''.join([i['hepburn'] for i in kks.convert(''.join([token.phonetic for token in tokenizer.tokenize(line_surface)]))])
-    line_roma_proc = min_error_split(line_pron_list, line_roma)
-    for i in range(len(result)):
-        if result[i]['type']==3:
-            try:
-                if result[i]['orig']=='は' and line_roma_proc[i]=='wa':
-                    result[i]['pron'] = 'wa'
-                elif result[i]['orig']=='へ' and line_roma_proc[i]=='e':
-                    result[i]['pron'] = 'e'
-            except:
-                print('Ignored errors when trying to correct ha and he...')
+                result.append({'orig': char, 'type': 0})
+
+        # 数字先给英语吧
+        result = haruhi_eng_pron_func(result)
 
     return result
 

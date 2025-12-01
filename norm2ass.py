@@ -84,7 +84,7 @@ def process_norm2assV2(struc, pretime = 20, posttime = 20):
                 starttime = nowtime = None
                 asstxt = ''
         elif item['type'] == 0 and 'start' not in item:
-            if struc[i-1].get('type') in (1,3,4) and item.get('orig') not in [' ','　']+newnums:
+            if struc[i-1].get('type') in (1,3,4,5) and item.get('orig') not in [' ','　']+newnums:
                 asstxt += item['orig']
             # elif struc[i-1].get('type') == 2 and item.get('orig') not in [' ','　']+newnums:
             #     asstxt += r'{\k0}' + item['orig']
