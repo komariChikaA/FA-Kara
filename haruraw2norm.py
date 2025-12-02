@@ -170,7 +170,7 @@ def is_number(char):
     return char.isdigit() # isnumeric
 
 def get_norm_ruby(item):
-    # 1:英文, 2:注音结构, 3:假名, 4:数字, 5:中文, 6:隐藏注音
+    # 1:英文, 2:注音结构, 3:东亚文字（假名、中文汉字）, 4:数字, 5:隐式辅助注音
     if item['type'] == 2:
         return item['ruby']
     if item['type'] in (3, 5):
@@ -474,13 +474,21 @@ def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=Tru
                 new_list.append(item)
         return new_list
 
+    if lang == 'auto': # 后续考虑langdetect
+        for char in line:
+            if is_hiragana(char) or is_katakana(char):
+                lang = 'jaen'
+                break
+        else:
+            lang = 'zhen'
+
     result = []
     if lang in ['ja', 'jaen']:
-        tokens = re.split(r'(\{.*?\})', line)
+        tokens = re.split(r'(\{.*?\}|\[.*?\])', line)
         
         for token in tokens:
             if not token:
-                continue    
+                continue
             # 处理振假名结构 {漢字|假名}
             if token.startswith('{') and token.endswith('}'):
                 content = token[1:-1]
@@ -500,7 +508,19 @@ def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=Tru
                             'orig': '',
                             'type': 2,
                             'ruby': ruby_text[i]
-                        })        
+                        })
+            # 隐式注音 [字符|romaji]
+            elif token.startswith('[') and token.endswith(']'):
+                content = token[1:-1]
+                parts = content.split('|')
+                assert len(parts) == 2, f"注音格式错误：{token}"
+                kanji, ruby_text = parts
+                assert is_english(ruby_text), f"辅助注音格式错误：{token}"
+                result.append({
+                    'orig': kanji,
+                    'type': 5,
+                    'pron': ruby_text
+                })
             # 处理普通字符
             else:
                 token = sylla_split(token, sokuon_split, hatsuon_split)
@@ -567,24 +587,41 @@ def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=Tru
                         result[i]['pron'] = 'e'
                 except:
                     print('Ignored errors when trying to correct ha and he...')
-    else: # zhen
-        for char in line:
-            if is_kanji(char):
-                result.append({'orig': char, 'type': 5, 'pron': hanzi_to_phonetic(char)[0]})
-            elif is_english(char) or is_english_punctuation(char):
-                if result and result[-1].get('type')==1:
-                    result[-1]['orig'] += char
-                elif is_english(char):
-                    result.append({'orig': char, 'type': 1})
-                else:
-                    result.append({'orig': char, 'type': 0})
-            elif is_number(char):
-                if result and result[-1].get('type')==4:
-                    result[-1]['orig'] += char
-                else:
-                    result.append({'orig': char, 'type': 4})
+    elif lang == 'zhen':
+        tokens = re.split(r'(\[.*?\])', line)
+        
+        for token in tokens:
+            if not token:
+                continue
+            if token.startswith('[') and token.endswith(']'):
+                content = token[1:-1]
+                parts = content.split('|')
+                assert len(parts) == 2, f"注音格式错误：{token}"
+                kanji, ruby_text = parts
+                assert is_english(ruby_text), f"辅助注音格式错误：{token}"
+                result.append({
+                    'orig': kanji,
+                    'type': 5,
+                    'pron': ruby_text
+                })
             else:
-                result.append({'orig': char, 'type': 0})
+                for char in token:
+                    if is_kanji(char):
+                        result.append({'orig': char, 'type': 3, 'pron': hanzi_to_phonetic(char)[0]})
+                    elif is_english(char) or is_english_punctuation(char):
+                        if result and result[-1].get('type')==1:
+                            result[-1]['orig'] += char
+                        elif is_english(char):
+                            result.append({'orig': char, 'type': 1})
+                        else:
+                            result.append({'orig': char, 'type': 0})
+                    elif is_number(char):
+                        if result and result[-1].get('type')==4:
+                            result[-1]['orig'] += char
+                        else:
+                            result.append({'orig': char, 'type': 4})
+                    else:
+                        result.append({'orig': char, 'type': 0})
 
         # 数字先给英语吧
         result = haruhi_eng_pron_func(result)
@@ -592,6 +629,6 @@ def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=Tru
     return result
 
 if __name__=='__main__':
-    input_string = "{阻|はば}むものは{無|な}い {身|み}{勝|かっ}{手|て}に More love, more jump!"
+    input_string = "{阻|はば}むも[の|n]は{無|な}い {身|み}{勝|かっ}{手|て}に More love, more jump!"
     parsed = process_haruhi_line(input_string)
     print(parsed)

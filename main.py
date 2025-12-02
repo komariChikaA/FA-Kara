@@ -50,7 +50,7 @@ def main():
     parser.add_argument('--offset', type=int, default=-150, help='输出ruby歌词文件中Offset标签的偏移值')
     parser.add_argument('--bpm', type=float, default=60, help='歌曲的BPM，导唱指示灯用')
     parser.add_argument('--bpb', type=int, default=3, help='导唱指示灯的符号个数')
-    parser.add_argument('--lang', default='jaen', help='歌词语言')
+    parser.add_argument('--lang', default='auto', help='歌词语言')
     parser.add_argument('-f', '--txt_format', default='hrh', help='歌词文本格式')
     parser.add_argument('-cl', '--characters_per_line', type=int, default=0, help='输出文件每行最大字数')
     args = parser.parse_args()
