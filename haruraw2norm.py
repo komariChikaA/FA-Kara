@@ -5,12 +5,15 @@ import pykakasi
 import pyphen
 import pypinyin
 from pypinyin import pinyin, Style
+import os
 import re
 # import string
 
 kks = pykakasi.kakasi()
 tokenizer = Tokenizer()
 tail_pron = '' # 'h'
+english_pronunciation_overrides = {}
+unknown_english_words = set()
 
 phoneme_map = {
     'AA': 'a', 'AE': 'a', 'AH': 'a', 'AO': 'o', 'AW': 'au', 'AY': 'ai',
@@ -146,6 +149,51 @@ def is_english(text):
 
 def is_english_punctuation(char):
     return char == "'" # in string.punctuation
+
+def _english_pronunciation_key(word):
+    return ''.join(char for char in word.lower() if char.isalpha() or char == "'").strip("'")
+
+def _split_pronunciation_value(value):
+    value = value.strip().lower().replace('-', ' ')
+    parts = [re.sub(r"[^a-z]", "", part) for part in value.split()]
+    return [part for part in parts if part]
+
+def clear_unknown_english_words():
+    unknown_english_words.clear()
+
+def get_unknown_english_words():
+    return sorted(unknown_english_words)
+
+def load_english_pronunciations(path):
+    english_pronunciation_overrides.clear()
+    clear_unknown_english_words()
+    if not path or not os.path.exists(path):
+        return
+
+    loaded_count = 0
+    with open(path, 'r', encoding='utf-8') as file:
+        for line_no, raw_line in enumerate(file, 1):
+            line = raw_line.split('#', 1)[0].strip()
+            if not line:
+                continue
+            if '=' in line:
+                word, pronunciation = line.split('=', 1)
+            else:
+                parts = line.split(maxsplit=1)
+                if len(parts) != 2:
+                    print(f"Ignored pronunciation line {line_no}: {raw_line.rstrip()}")
+                    continue
+                word, pronunciation = parts
+
+            key = _english_pronunciation_key(word)
+            pronunciation_parts = _split_pronunciation_value(pronunciation)
+            if not key or not pronunciation_parts:
+                print(f"Ignored pronunciation line {line_no}: {raw_line.rstrip()}")
+                continue
+            english_pronunciation_overrides[key] = pronunciation_parts
+            loaded_count += 1
+    if loaded_count:
+        print(f"Loaded {loaded_count} custom English pronunciations from {path}")
 
 def is_kanji(char):
     return ('\u4E00' <= char <= '\u9FFF' or '\u3400' <= char <= '\u4DBF' or
@@ -360,6 +408,18 @@ def process_english_word(word, surf=True):
     elif word=='A':
         return [('A', 'ei')]
 
+    override_pronunciation = english_pronunciation_overrides.get(_english_pronunciation_key(word))
+    if override_pronunciation:
+        if not surf:
+            return ''.join(override_pronunciation)
+        if len(override_pronunciation) == 1:
+            return [(word, override_pronunciation[0])]
+        hyphenated = eng_dic.inserted(word)
+        surface_syllables = hyphenated.split('-')
+        if len(surface_syllables) != len(override_pronunciation):
+            return [(word, ''.join(override_pronunciation))]
+        return list(zip(surface_syllables, override_pronunciation))
+
     hyphenated = eng_dic.inserted(word)
     surface_syllables = hyphenated.split('-')
 
@@ -368,6 +428,7 @@ def process_english_word(word, surf=True):
     #     return [(word, 'iyu')]
     if word_lower not in cmu_dict:
         print("Word '"+word+"' not in the dictionary...")
+        unknown_english_words.add(word)
         direct_syllables = [i.replace("'", '').lower() for i in surface_syllables]
         return list(zip(surface_syllables, direct_syllables))
     

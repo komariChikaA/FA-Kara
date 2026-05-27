@@ -204,6 +204,7 @@ def main():
     parser.add_argument('-f', '--txt_format', default='hrh', help='歌词文本格式')
     parser.add_argument('-cl', '--characters_per_line', type=int, default=0, help='输出文件每行最大字数')
     parser.add_argument('-cs', '--chunk_seconds', type=float, default=0, help='分块推理目标时长，单位：秒。0表示关闭自动分块')
+    parser.add_argument('--pronunciation_file', default='pronunciations.txt', help='自定义英文发音表文件名。默认读取输入输出目录下的 pronunciations.txt')
     args = parser.parse_args()
 
     sokuon_split = args.sokuon_split
@@ -223,6 +224,7 @@ def main():
     txt_format = args.txt_format.lower()
     output_characters_per_line = args.characters_per_line
     chunk_seconds = args.chunk_seconds
+    pronunciation_file = args.pronunciation_file
     
     real_io_path = os.path.normpath(user_path) if os.path.isabs(user_path) else os.path.normpath(os.path.join(script_dir, user_path))
     if not os.path.exists(real_io_path):
@@ -234,8 +236,10 @@ def main():
         input_audio_path = os.path.normpath(os.path.join(real_io_path, 'i.wav'))
     else:
         input_audio_path = os.path.normpath(os.path.join(real_io_path, 'i.mp3'))
+    pronunciation_path = os.path.normpath(os.path.join(real_io_path, pronunciation_file)) if pronunciation_file else None
 
     print('Loading files...')
+    hn.load_english_pronunciations(pronunciation_path)
     result_list = []
     with open(input_text_path, 'r', encoding='utf-8') as file:
         if txt_format=='uta':
@@ -301,6 +305,11 @@ def main():
             continue
         else:
             print(f"alignment_tokens可能包含错误数据{item}")
+    unknown_english_words = hn.get_unknown_english_words()
+    if unknown_english_words:
+        print("Unknown English words found. Add them to pronunciations.txt if the guessed pronunciation is wrong:")
+        for word in unknown_english_words:
+            print(f"  {word}=<romaji>")
 
     end_time = time.time()
     print("Lyrics text analysis executed in", round(end_time - start_time, 3), "seconds")

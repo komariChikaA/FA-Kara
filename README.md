@@ -60,6 +60,25 @@ python main.py
 - 普通假名、英文和数字会按项目现有逻辑转换为发音 token。
 - 空行和普通换行会作为歌词段落边界处理。
 
+## 英文单词发音
+
+英文会优先查 CMU 发音词典。专名、生造词、缩写或歌词里的特殊读法可能查不到，程序会在终端输出：
+
+``` txt
+Unknown English words found. Add them to pronunciations.txt if the guessed pronunciation is wrong:
+  Komariver=<romaji>
+```
+
+这时可以在输入输出目录创建 `pronunciations.txt`，每行写一个自定义发音：
+
+``` txt
+Komariver=komariva
+YOASOBI=yoasobi
+ChatGPT=chatjipiti
+```
+
+等号右边使用本项目的 romaji/token 写法；`#` 后面可以写注释。只需要写自动识别不准的词。单句里临时处理也可以继续使用 `[显示文字|romaji]`，例如 `[Komariver|komariva]`。
+
 ## 注释段
 
 注释段用于在歌曲中显示几秒说明文字，例如标题、间奏提示、剧情提示或台词提示。注释段不会参与音频识别，也不会写入 `o_rlf.lrc` 或 `o_ruby.lrc`，只会输出到 `o.ass`。
