@@ -13,6 +13,10 @@ import lrcfmt
 import norm2ass
 from norm2lrc import *
 
+COMMENT_TYPE = 6
+LYRIC_TYPES = {1, 2, 3, 4, 5}
+COMMENT_RE = re.compile(r'^\s*@(comment|note|注释)\[(?P<duration>[^\]]+)\]\s*(?P<text>.*?)\s*$')
+
 def non_silent_recog(audio_file, sr = None, frame_second = 1, threspct = 10, thresrto = .1):
     '识别非静音片段'
     frame_length = int(sr * frame_second)
@@ -32,6 +36,82 @@ def non_silent_recog(audio_file, sr = None, frame_second = 1, threspct = 10, thr
     if start is not None:
         segments.append((start, times[-1]))
     return segments
+
+def parse_comment_duration(raw_duration):
+    '解析 @comment[...] 中以秒为单位的时长'
+    value = raw_duration.strip().lower()
+    for suffix in ('seconds', 'second', 'secs', 'sec', 's', '秒'):
+        if value.endswith(suffix):
+            value = value[:-len(suffix)].strip()
+            break
+    try:
+        seconds = float(value)
+    except ValueError as exc:
+        raise ValueError(f"注释段时长格式错误：{raw_duration}") from exc
+    if seconds <= 0:
+        raise ValueError(f"注释段时长必须大于 0：{raw_duration}")
+    return int(round(seconds * 100))
+
+def parse_comment_line(line, line_no):
+    '读取不会进入音频识别的注释段：@comment[3.0] 文本'
+    match = COMMENT_RE.match(line)
+    if not match:
+        return None
+    text = match.group('text').strip()
+    if not text:
+        raise ValueError(f"第 {line_no} 行注释段缺少显示文字")
+    return [{
+        'orig': text,
+        'type': COMMENT_TYPE,
+        'duration': parse_comment_duration(match.group('duration')),
+    }]
+
+def is_timed_lyric(item):
+    return item.get('type') in LYRIC_TYPES and item.get('start') and item.get('end')
+
+def previous_dialogue_tail(result_list, index):
+    for item in reversed(result_list[:index]):
+        if item.get('type') == 0 and item.get('orig') == '\n' and item.get('start'):
+            return parse_time_to_hundredths(item['start'])
+        if is_timed_lyric(item):
+            return parse_time_to_hundredths(item['end'])
+    return None
+
+def preview_comment_text(text, max_length=20):
+    return text if len(text) <= max_length else text[:max_length] + '...'
+
+def assign_comment_timelines(result_list, pretime=20, posttime=20):
+    '将注释段放到前一句歌词 ASS 段之后，并尽量避开下一句歌词'
+    last_reserved_end = None
+    for i, item in enumerate(result_list):
+        if item.get('type') != COMMENT_TYPE:
+            continue
+
+        next_start = None
+        for next_item in result_list[i + 1:]:
+            if is_timed_lyric(next_item):
+                next_start = parse_time_to_hundredths(next_item['start'])
+                break
+
+        prev_end = previous_dialogue_tail(result_list, i)
+        start_time = (prev_end + posttime) if prev_end is not None else 0
+        if last_reserved_end is not None:
+            start_time = max(start_time, last_reserved_end)
+
+        end_time = start_time + item['duration']
+        if next_start is not None:
+            latest_end = max(next_start - pretime, 0)
+            if end_time > latest_end:
+                end_time = latest_end
+                if end_time <= start_time:
+                    item['skip'] = True
+                    print(f"Skipped comment segment '{preview_comment_text(item['orig'])}' because there is no gap before the next lyric.")
+                    continue
+                print(f"Shortened comment segment '{preview_comment_text(item['orig'])}' to avoid overlapping the next lyric.")
+
+        item['start'] = format_hundredths_to_time_str(start_time)
+        item['end'] = format_hundredths_to_time_str(end_time)
+        last_reserved_end = end_time
 
 def main():
     start_time = time.time()
@@ -91,12 +171,16 @@ def main():
             for line in file:
                 utat_str += line
             file = lrcfmt.utat_process(utat_str)
-        for line in file:
+        for line_no, line in enumerate(file, 1):
             if txt_format=='moe':
                 line = lrcfmt.moeg_process_line(line)
             if line.strip():
+                comment_items = parse_comment_line(line, line_no)
+                if comment_items is not None:
+                    result_list.extend(comment_items)
+                    continue
                 result_list.extend(hn.process_haruhi_line(line, lrc_language, sokuon_split, hatsuon_split))
-    if result_list[-1]['orig']!='\n':
+    if result_list and result_list[-1].get('type') != COMMENT_TYPE and result_list[-1]['orig']!='\n':
         result_list.append({'orig': '\n', 'type': 0, 'pron': ''})
 
     if tail_correct == 1:
@@ -170,7 +254,7 @@ def main():
         ns_small = non_silent_recog(audio_file, sr, .02, tail_thres_pct, tail_thres_ratio)
         ns_ends = [int(np.ceil(ns_end * 100)) for _, ns_end in ns_small]
         for i in range(len(result_list)-1):
-            if result_list[i]['type'] != 0 and result_list[i+1]['type'] == 0:
+            if result_list[i].get('type') in LYRIC_TYPES and result_list[i+1].get('type') == 0:
                 current_end = parse_time_to_hundredths(result_list[i]['end'])
                 next_ind = i + 2
                 next_start = np.inf
@@ -197,6 +281,10 @@ def main():
     if output_characters_per_line > 0:
         split_long_segments(result_list, max_length=output_characters_per_line)
 
+    ass_pretime = 20
+    ass_posttime = 20
+    assign_comment_timelines(result_list, ass_pretime, ass_posttime)
+
     main_output = process_main(result_list, ruby_tag_offset, bpm, beats_per_bar)
     ruby_output = process_ruby(result_list)
     content = f"{main_output}\n{ruby_output}"
@@ -205,7 +293,7 @@ def main():
     rlf_output = process_rlf(result_list)
     with open(os.path.join(real_io_path, 'o_rlf.lrc'), 'w', encoding='utf-8') as f:
         f.write(rlf_output)
-    ass_output = norm2ass.process_norm2assV2(result_list)
+    ass_output = norm2ass.process_norm2assV2(result_list, ass_pretime, ass_posttime)
     ass_head = '''[Script Info]
 ScriptType: v4.00+
 YCbCr Matrix: TV.601

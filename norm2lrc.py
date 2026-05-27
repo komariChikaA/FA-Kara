@@ -2,6 +2,9 @@ import numpy as np
 import re
 import unicodedata
 
+COMMENT_TYPE = 6
+LYRIC_TYPES = {1, 2, 3, 4, 5}
+
 def parse_time_to_hundredths(time_str):
     match = re.match(r'\[(\d{2}):(\d{2}):(\d{2})\]', time_str)
     minutes, seconds, hundredths = int(match.group(1)), int(match.group(2)), int(match.group(3))
@@ -42,11 +45,12 @@ def non_silent_head_adjust(result_list, non_silent_ranges):
         sentences_list = []
         st = None
         while i < len(result_list):
-            if result_list[i].get('type') == 0:
+            item_type = result_list[i].get('type')
+            if item_type == 0 or item_type == COMMENT_TYPE:
                 if st:
                     sentences_list.append((si, i-1, st, result_list[i-1].get('end')))
                     st = None
-            elif not st:
+            elif item_type in LYRIC_TYPES and not st:
                 si = i
                 st = result_list[i].get('start')
             i += 1
@@ -95,7 +99,8 @@ def split_long_segments(elements, max_length=20):
     space_positions = [] # 记录空格位置、该位置前的长度
     i = 0
     while i <= len(elements):
-        if i == len(elements) or elements[i].get('type') == 0 and elements[i].get('orig') == '\n':
+        if (i == len(elements) or elements[i].get('type') == COMMENT_TYPE or
+                elements[i].get('type') == 0 and elements[i].get('orig') == '\n'):
             if current_length > max_length and space_positions:
                 # 寻找最能均匀分割行文本的空格
                 n_cuts = current_length // max_length + 1
@@ -132,6 +137,9 @@ def process_main(result_list, tag_offset=-150, bpm=60, beats_per_bar=3):
     i = 0
     while i < len(result_list):
         item = result_list[i]
+        if item.get('type') == COMMENT_TYPE:
+            i += 1
+            continue
 
         if ('start' in item and current_line == "" and item['type'] in [1, 2, 3, 4, 5]):
             current_start_time = parse_time_to_hundredths(item['start'])
@@ -185,6 +193,9 @@ def process_ruby(result_list):
 
     while i < len(result_list):
         item = result_list[i]
+        if item.get('type') == COMMENT_TYPE:
+            i += 1
+            continue
 
         if item['type'] == 2 and item['orig'] != '':
             ruby1 = item['orig']
@@ -226,6 +237,9 @@ def process_rlf(result_list):
     i = 0
     while i < len(result_list):
         item = result_list[i]
+        if item.get('type') == COMMENT_TYPE:
+            i += 1
+            continue
 
         if item['type'] in [1, 3, 4, 5] or item['type'] == 0 and 'start' in item and item['orig'] not in ('\n', '', ' ', '　'):
             current_line += f"[1|{item['start'][1:-1]}]{item['orig']}"

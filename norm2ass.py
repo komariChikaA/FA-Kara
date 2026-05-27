@@ -4,6 +4,9 @@ newnums = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩',
            '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳',
            '㉑', '㉒', '㉓', '㉔', '㉕', '㉖', '㉗', '㉘', '㉙', '㉚']
 
+COMMENT_TYPE = 6
+LYRIC_TYPES = {1, 2, 3, 4, 5}
+
 def int2asstime(cs: int) -> str:
     '厘秒整数转换为.ass时轴信息'
     hours = cs // 360000
@@ -19,14 +22,30 @@ def parse_time_to_hundredths(time_str):
     minutes, seconds, hundredths = int(match.group(1)), int(match.group(2)), int(match.group(3))
     return minutes * 6000 + seconds * 100 + hundredths
 
+def ass_escape_text(text):
+    return text.replace('\\', r'\\').replace('{', r'\{').replace('}', r'\}').replace('\n', r'\N')
+
+def comment_dialogue(item):
+    if item.get('skip') or not item.get('start') or not item.get('end'):
+        return ''
+    start = int2asstime(parse_time_to_hundredths(item['start']))
+    end = int2asstime(parse_time_to_hundredths(item['end']))
+    return 'Dialogue: 0,'+start+','+end+r',Default,,0,0,0,comment,'+ass_escape_text(item.get('orig', ''))+'\n'
+
 def process_norm2assV1(struc, pretime = 20, posttime = 20):
     '模型输出的实际时值，不再维护'
     result = ''
     for i in range(len(struc)):
-        if not result or result[-1]=='\n':
-            asstxt = ''
-            nowtime = starttime = parse_time_to_hundredths([itemd for itemd in struc[i:] if itemd['type'] != 0][0]['start']) - pretime
         item = struc[i]
+        if item.get('type') == COMMENT_TYPE:
+            result += comment_dialogue(item)
+            continue
+        if not result or result[-1]=='\n':
+            future_lyrics = [itemd for itemd in struc[i:] if itemd.get('type') in LYRIC_TYPES and itemd.get('start')]
+            if not future_lyrics:
+                continue
+            asstxt = ''
+            nowtime = starttime = parse_time_to_hundredths(future_lyrics[0]['start']) - pretime
         if item['type'] == 0 and item['orig'] == '\n':
             try:
                 nowtime = parse_time_to_hundredths(item['start'])
@@ -59,7 +78,14 @@ def process_norm2assV2(struc, pretime = 20, posttime = 20):
     i = 0
     while i < len(struc):
         item = struc[i]
-        if not starttime:
+        if item.get('type') == COMMENT_TYPE:
+            result += comment_dialogue(item)
+            i += 1
+            continue
+        if item.get('type') == 0 and item.get('orig') == '\n' and starttime is None and not asstxt:
+            i += 1
+            continue
+        if starttime is None:
             try:
                 starttime = parse_time_to_hundredths(item['start']) - pretime
                 nowtime = parse_time_to_hundredths(item['start'])
@@ -95,7 +121,7 @@ def process_norm2assV2(struc, pretime = 20, posttime = 20):
                         item_kdur = 0
                         break
                     if struc[i+1].get('start'):
-                        if nowtime:
+                        if nowtime is not None:
                             item_kdur = parse_time_to_hundredths(struc[i+1]['start']) - nowtime
                         else:
                             item_kdur = 0
