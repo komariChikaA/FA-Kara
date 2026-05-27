@@ -5,6 +5,7 @@ newnums = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩',
            '㉑', '㉒', '㉓', '㉔', '㉕', '㉖', '㉗', '㉘', '㉙', '㉚']
 
 COMMENT_TYPE = 6
+CHUNK_TYPE = 7
 LYRIC_TYPES = {1, 2, 3, 4, 5}
 
 def int2asstime(cs: int) -> str:
@@ -39,6 +40,8 @@ def process_norm2assV1(struc, pretime = 20, posttime = 20):
         item = struc[i]
         if item.get('type') == COMMENT_TYPE:
             result += comment_dialogue(item)
+            continue
+        if item.get('type') == CHUNK_TYPE:
             continue
         if not result or result[-1]=='\n':
             future_lyrics = [itemd for itemd in struc[i:] if itemd.get('type') in LYRIC_TYPES and itemd.get('start')]
@@ -80,6 +83,9 @@ def process_norm2assV2(struc, pretime = 20, posttime = 20):
         item = struc[i]
         if item.get('type') == COMMENT_TYPE:
             result += comment_dialogue(item)
+            i += 1
+            continue
+        if item.get('type') == CHUNK_TYPE:
             i += 1
             continue
         if item.get('type') == 0 and item.get('orig') == '\n' and starttime is None and not asstxt:

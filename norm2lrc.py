@@ -3,6 +3,7 @@ import re
 import unicodedata
 
 COMMENT_TYPE = 6
+CHUNK_TYPE = 7
 LYRIC_TYPES = {1, 2, 3, 4, 5}
 
 def parse_time_to_hundredths(time_str):
@@ -46,7 +47,7 @@ def non_silent_head_adjust(result_list, non_silent_ranges):
         st = None
         while i < len(result_list):
             item_type = result_list[i].get('type')
-            if item_type == 0 or item_type == COMMENT_TYPE:
+            if item_type in (0, COMMENT_TYPE, CHUNK_TYPE):
                 if st:
                     sentences_list.append((si, i-1, st, result_list[i-1].get('end')))
                     st = None
@@ -99,7 +100,7 @@ def split_long_segments(elements, max_length=20):
     space_positions = [] # 记录空格位置、该位置前的长度
     i = 0
     while i <= len(elements):
-        if (i == len(elements) or elements[i].get('type') == COMMENT_TYPE or
+        if (i == len(elements) or elements[i].get('type') in (COMMENT_TYPE, CHUNK_TYPE) or
                 elements[i].get('type') == 0 and elements[i].get('orig') == '\n'):
             if current_length > max_length and space_positions:
                 # 寻找最能均匀分割行文本的空格
@@ -137,7 +138,7 @@ def process_main(result_list, tag_offset=-150, bpm=60, beats_per_bar=3):
     i = 0
     while i < len(result_list):
         item = result_list[i]
-        if item.get('type') == COMMENT_TYPE:
+        if item.get('type') in (COMMENT_TYPE, CHUNK_TYPE):
             i += 1
             continue
 
@@ -193,7 +194,7 @@ def process_ruby(result_list):
 
     while i < len(result_list):
         item = result_list[i]
-        if item.get('type') == COMMENT_TYPE:
+        if item.get('type') in (COMMENT_TYPE, CHUNK_TYPE):
             i += 1
             continue
 
@@ -237,7 +238,7 @@ def process_rlf(result_list):
     i = 0
     while i < len(result_list):
         item = result_list[i]
-        if item.get('type') == COMMENT_TYPE:
+        if item.get('type') in (COMMENT_TYPE, CHUNK_TYPE):
             i += 1
             continue
 

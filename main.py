@@ -14,8 +14,10 @@ import norm2ass
 from norm2lrc import *
 
 COMMENT_TYPE = 6
+CHUNK_TYPE = 7
 LYRIC_TYPES = {1, 2, 3, 4, 5}
 COMMENT_RE = re.compile(r'^\s*@(comment|note|注释)\[(?P<duration>[^\]]+)\]\s*(?P<text>.*?)\s*$')
+CHUNK_RE = re.compile(r'^\s*@(chunk|split|分块)\[(?P<time>[^\]]+)\]\s*$')
 
 def non_silent_recog(audio_file, sr = None, frame_second = 1, threspct = 10, thresrto = .1):
     '识别非静音片段'
@@ -66,6 +68,41 @@ def parse_comment_line(line, line_no):
         'duration': parse_comment_duration(match.group('duration')),
     }]
 
+def parse_chunk_time(raw_time):
+    '解析 @chunk[...] 中的音频时间，支持秒、mm:ss、hh:mm:ss'
+    value = raw_time.strip().lower()
+    for suffix in ('seconds', 'second', 'secs', 'sec', 's', '秒'):
+        if value.endswith(suffix):
+            value = value[:-len(suffix)].strip()
+            break
+    parts = value.split(':')
+    try:
+        if len(parts) == 1:
+            seconds = float(parts[0])
+        elif len(parts) == 2:
+            seconds = int(parts[0]) * 60 + float(parts[1])
+        elif len(parts) == 3:
+            seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+        else:
+            raise ValueError
+    except ValueError as exc:
+        raise ValueError(f"分块时间格式错误：{raw_time}") from exc
+    if seconds <= 0:
+        raise ValueError(f"分块时间必须大于 0：{raw_time}")
+    return seconds
+
+def parse_chunk_line(line, line_no):
+    '读取手动分块锚点：@chunk[01:23]'
+    match = CHUNK_RE.match(line)
+    if not match:
+        return None
+    return [{
+        'orig': '',
+        'type': CHUNK_TYPE,
+        'time': parse_chunk_time(match.group('time')),
+        'line_no': line_no,
+    }]
+
 def is_timed_lyric(item):
     return item.get('type') in LYRIC_TYPES and item.get('start') and item.get('end')
 
@@ -79,6 +116,39 @@ def previous_dialogue_tail(result_list, index):
 
 def preview_comment_text(text, max_length=20):
     return text if len(text) <= max_length else text[:max_length] + '...'
+
+def get_alignment_sentence_spans(result_list):
+    '返回按歌词行切分的 token 区间，用于自动分块'
+    spans = []
+    token_count = 0
+    current_start = None
+    for item in result_list:
+        if item.get('pron'):
+            if current_start is None:
+                current_start = token_count
+            token_count += 1
+        if item.get('type') in (COMMENT_TYPE, CHUNK_TYPE) or item.get('type') == 0 and item.get('orig') == '\n':
+            if current_start is not None and current_start < token_count:
+                spans.append((current_start, token_count))
+                current_start = None
+    if current_start is not None and current_start < token_count:
+        spans.append((current_start, token_count))
+    return spans
+
+def get_manual_chunk_boundaries(result_list):
+    '返回手动分块锚点对应的 token 下标和音频时间'
+    boundaries = []
+    token_count = 0
+    for item in result_list:
+        if item.get('type') == CHUNK_TYPE:
+            boundaries.append({
+                'token_index': token_count,
+                'time': item['time'],
+                'line_no': item.get('line_no'),
+            })
+        elif item.get('pron'):
+            token_count += 1
+    return boundaries
 
 def assign_comment_timelines(result_list, pretime=20, posttime=20):
     '将注释段放到前一句歌词 ASS 段之后，并尽量避开下一句歌词'
@@ -133,6 +203,7 @@ def main():
     parser.add_argument('--lang', default='auto', help='歌词语言')
     parser.add_argument('-f', '--txt_format', default='hrh', help='歌词文本格式')
     parser.add_argument('-cl', '--characters_per_line', type=int, default=0, help='输出文件每行最大字数')
+    parser.add_argument('-cs', '--chunk_seconds', type=float, default=0, help='分块推理目标时长，单位：秒。0表示关闭自动分块')
     args = parser.parse_args()
 
     sokuon_split = args.sokuon_split
@@ -151,6 +222,7 @@ def main():
     lrc_language = args.lang.lower()
     txt_format = args.txt_format.lower()
     output_characters_per_line = args.characters_per_line
+    chunk_seconds = args.chunk_seconds
     
     real_io_path = os.path.normpath(user_path) if os.path.isabs(user_path) else os.path.normpath(os.path.join(script_dir, user_path))
     if not os.path.exists(real_io_path):
@@ -178,6 +250,10 @@ def main():
                 comment_items = parse_comment_line(line, line_no)
                 if comment_items is not None:
                     result_list.extend(comment_items)
+                    continue
+                chunk_items = parse_chunk_line(line, line_no)
+                if chunk_items is not None:
+                    result_list.extend(chunk_items)
                     continue
                 result_list.extend(hn.process_haruhi_line(line, lrc_language, sokuon_split, hatsuon_split))
     if result_list and result_list[-1].get('type') != COMMENT_TYPE and result_list[-1]['orig']!='\n':
@@ -217,6 +293,8 @@ def main():
         if 'pron' in item and item['pron']:
             alignment_tokens.append(item['pron'])
             token_to_index_map[len(alignment_tokens) - 1] = i
+    sentence_token_spans = get_alignment_sentence_spans(result_list)
+    manual_chunk_boundaries = get_manual_chunk_boundaries(result_list)
 
     for item in alignment_tokens:
         if hn.is_english(item):
@@ -230,9 +308,22 @@ def main():
     audio_file, sr = librosa.load(input_audio_path, sr=None) 
     non_silent_ranges = non_silent_recog(audio_file, sr, silent_window_s, tail_thres_pct, tail_thres_ratio)
 
+    use_chunked_alignment = chunk_seconds > 0 or bool(manual_chunk_boundaries)
     if audio_speed == 1:
         print('Adding timelines...')
-        alignment_results = align.align_audio_with_text(audio_file, alignment_tokens, non_silent_ranges, sr)
+        if use_chunked_alignment:
+            alignment_results = align.align_audio_with_text_chunked(
+                audio_file,
+                alignment_tokens,
+                non_silent_ranges,
+                sr,
+                audio_speed,
+                chunk_seconds,
+                sentence_token_spans,
+                manual_chunk_boundaries,
+            )
+        else:
+            alignment_results = align.align_audio_with_text(audio_file, alignment_tokens, non_silent_ranges, sr)
     else:
         print('Changing the audio speed...')
         start_time = time.time()
@@ -240,7 +331,19 @@ def main():
         end_time = time.time()
         print("Audio speed changing executed in", round(end_time - start_time, 3), "seconds")
         print('Adding timelines...')
-        alignment_results = align.align_audio_with_text(y_processed, alignment_tokens, non_silent_ranges, sr, audio_speed)
+        if use_chunked_alignment:
+            alignment_results = align.align_audio_with_text_chunked(
+                y_processed,
+                alignment_tokens,
+                non_silent_ranges,
+                sr,
+                audio_speed,
+                chunk_seconds,
+                sentence_token_spans,
+                manual_chunk_boundaries,
+            )
+        else:
+            alignment_results = align.align_audio_with_text(y_processed, alignment_tokens, non_silent_ranges, sr, audio_speed)
 
     for i, result in enumerate(alignment_results):
         if i in token_to_index_map:
