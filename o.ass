@@ -295,10 +295,10 @@ Dialogue: 0,0:20:27.44,0:20:30.13,K14,,0,0,0,karaoke,{\k20}{\k15}I'm{\k2} {\k34}
 Dialogue: 0,0:20:29.74,0:20:35.17,K16,,0,0,0,karaoke,{\k20}{\k18}So,{\k2} {\k10}I've{\k1} {\k26}got{\k24} {\k15}these{\k26} {\k48}quick{\k28} {\k133}repairs{\k4} {\k60}to{\k4} {\k104}cope{\k20}
 Dialogue: 0,0:20:35.55,0:20:38.61,K14,,0,0,0,karaoke,{\k20}{\k14}Do{\k2} {\k22}you{\k2} {\k30}ever{\k1} {\k19}get{\k2} {\k9}a{\k2} {\k35}little{\k2} {\k23}bit{\k1} {\k46}tired{\k2} {\k14}of{\k3} {\k37}life?{\k20}
 Dialogue: 0,0:20:38.65,0:20:41.63,K16,,0,0,0,karaoke,{\k20}{\k4}Like{\k0} {\k9}you're{\k2} {\k29}not{\k3} {\k31}really{\k2} {\k32}happy,{\k2} {\k22}but{\k2} {\k12}you{\k1} {\k20}don't{\k0} {\k32}wanna{\k3} {\k52}die{\k20}
-Dialogue: 0,0:20:41.98,0:20:55.52,K14,,0,0,0,karaoke,{\k20}{\k14}Like{\k2} {\k11}a{\k2} {\k41}numb{\k2} {\k52}little{\k5} {\k37}bug{\k0} {\k40}that's{\k81} {\k63}gotta{\k937} {\k27}survive{\k20}
-Dialogue: 0,0:20:55.15,0:21:04.13,K16,,0,0,0,karaoke,{\k20}{\k52}That's{\k148} {\k62}gotta{\k518} {\k78}survive{\k20}
+Dialogue: 0,0:20:42.00,0:20:45.12,K14,,0,0,0,karaoke,{\k20}{\k18}Like{\k1} {\k13}a{\k2} {\k25}numb{\k2} {\k27}little{\k3} {\k37}bug{\k4} {\k35}that's{\k2} {\k33}gotta{\k2} {\k74}survive{\k20}
+Dialogue: 0,0:20:44.91,0:20:47.47,K16,,0,0,0,karaoke,{\k20}{\k22}That's{\k2} {\k33}gotta{\k4} {\k155}survive{\k20}
 Dialogue: 0,0:21:04.13,0:21:08.85,Default,,0,0,0,comment,(Breakeven (The Script))
-Dialogue: 0,0:21:08.85,0:21:24.56,K14,,0,0,0,karaoke,{\k20}{\k63}I'm{\k827} {\k33}still{\k357} {\k56}alive{\k2} {\k34}but{\k6} {\k28}I'm{\k2} {\k39}barely{\k5} {\k79}breathing{\k20}
+Dialogue: 0,0:21:21.74,0:21:24.56,K14,,0,0,0,karaoke,{\k20}{\k6}I'm{\k0} {\k29}still{\k2} {\k37}alive{\k7} {\k21}but{\k2} {\k11}I'm{\k2} {\k41}barely{\k1} {\k83}breathing{\k20}
 Dialogue: 0,0:21:26.51,0:21:29.78,K16,,0,0,0,karaoke,{\k20}{\k16}Just{\k3} {\k28}prayed{\k2} {\k18}to{\k2} {\k6}a{\k6} {\k33}God{\k1} {\k18}that{\k2} {\k10}I{\k0} {\k28}don't{\k2} {\k66}believe{\k6} {\k40}in{\k20}
 Dialogue: 0,0:21:31.65,0:21:36.38,K14,,0,0,0,karaoke,{\k20}{\k0}'{\k19}Cause{\k2} {\k21}I{\k2} {\k23}got{\k6} {\k36}time{\k2} {\k30}while{\k2} {\k30}she{\k2} {\k174}got{\k11} {\k73}freedom{\k20}
 Dialogue: 0,0:21:36.77,0:21:40.04,K16,,0,0,0,karaoke,{\k20}{\k0}'{\k19}Cause{\k1} {\k17}when{\k2} {\k7}a{\k2} {\k20}heart{\k6} {\k34}breaks,{\k2} {\k17}no,{\k2} {\k8}it{\k3} {\k28}don't{\k1} {\k118}breakeven{\k20}

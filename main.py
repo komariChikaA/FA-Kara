@@ -241,6 +241,16 @@ def parse_ass_time_to_seconds(time_str):
     centiseconds = int((match.group(4) or '0').ljust(2, '0')[:2])
     return hours * 3600 + minutes * 60 + seconds + centiseconds / 100
 
+def format_seconds_to_ass_time(seconds):
+    total_centiseconds = max(0, int(round(seconds * 100)))
+    hours = total_centiseconds // 360000
+    total_centiseconds %= 360000
+    minutes = total_centiseconds // 6000
+    total_centiseconds %= 6000
+    secs = total_centiseconds // 100
+    centiseconds = total_centiseconds % 100
+    return f"{hours}:{minutes:02d}:{secs:02d}.{centiseconds:02d}"
+
 def format_seconds_for_log(seconds):
     total_centiseconds = int(round(seconds * 100))
     hours = total_centiseconds // 360000
@@ -493,6 +503,15 @@ def crop_ranges_to_window(ranges, start_time, end_time):
         cropped.append((start_time, end_time))
     return cropped
 
+def crop_ranges_to_limits(ranges, start_time, end_time):
+    cropped = []
+    for range_start, range_end in ranges:
+        cropped_start = max(range_start, start_time)
+        cropped_end = min(range_end, end_time)
+        if cropped_end > cropped_start:
+            cropped.append((cropped_start, cropped_end))
+    return cropped
+
 def apply_tail_pronunciation(result_list, tail_correct):
     if tail_correct == 1:
         for i in range(len(result_list)):
@@ -522,8 +541,13 @@ def apply_tail_pronunciation(result_list, tail_correct):
                 except:
                     continue
 
-def apply_tail_timing_correction(result_list, audio_file, sr, tail_thres_pct, tail_thres_ratio):
+def apply_tail_timing_correction(result_list, audio_file, sr, tail_thres_pct, tail_thres_ratio, limit_range=None):
     ns_small = non_silent_recog(audio_file, sr, .02, tail_thres_pct, tail_thres_ratio)
+    if limit_range is not None:
+        limit_start, limit_end = limit_range
+        ns_small = crop_ranges_to_limits(ns_small, limit_start, limit_end)
+        if not ns_small:
+            ns_small = [(limit_start, limit_end)]
     ns_ends = [int(np.ceil(ns_end * 100)) for _, ns_end in ns_small]
     for i in range(len(result_list)-1):
         if result_list[i].get('type') in LYRIC_TYPES and result_list[i+1].get('type') == 0:
@@ -630,6 +654,14 @@ def parse_generated_dialogues(ass_output):
             dialogues.append(event)
     return dialogues
 
+def clamp_ass_event_times(fields, min_start, max_end):
+    start_time = max(parse_ass_time_to_seconds(fields[1]), min_start)
+    end_time = min(parse_ass_time_to_seconds(fields[2]), max_end)
+    if end_time <= start_time:
+        end_time = min(max_end, start_time + 0.01)
+    fields[1] = format_seconds_to_ass_time(start_time)
+    fields[2] = format_seconds_to_ass_time(end_time)
+
 def run_partial_realign(args, real_io_path, input_audio_path, input_text_path, lrc_language,
                         sokuon_split, hatsuon_split, tail_correct, silent_window_s,
                         tail_thres_pct, tail_thres_ratio, audio_speed, chunk_seconds):
@@ -694,7 +726,14 @@ def run_partial_realign(args, real_io_path, input_audio_path, input_text_path, l
     )
     result_list = non_silent_head_adjust(result_list, realign_ranges)
     if tail_correct == 3:
-        apply_tail_timing_correction(result_list, audio_file, sr, tail_thres_pct, tail_thres_ratio)
+        apply_tail_timing_correction(
+            result_list,
+            audio_file,
+            sr,
+            tail_thres_pct,
+            tail_thres_ratio,
+            (audio_start, audio_end),
+        )
 
     ass_output = norm2ass.process_norm2assV2(result_list, 20, 20)
     replacement_dialogues = parse_generated_dialogues(ass_output)
@@ -709,6 +748,7 @@ def run_partial_realign(args, real_io_path, input_audio_path, input_text_path, l
         fields[1] = replacement_event['fields'][1]
         fields[2] = replacement_event['fields'][2]
         fields[9] = replacement_event['fields'][9]
+        clamp_ass_event_times(fields, audio_start, audio_end)
         ass_lines[original_event['line_index']] = format_ass_event_line(
             original_event['event_type'],
             fields,
