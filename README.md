@@ -4,6 +4,18 @@ FA-Kara 是一个基于“注音歌词文本 + 人声音频”的自动卡拉 OK
 
 本项目主要参考了 [yohane](https://github.com/Japan7/yohane) 和 [Forced-Alignment-For-NicoKara](https://github.com/oHEILIo/Forced-Alignment-For-NicoKara/)。建议优先用于日语歌曲，但底层对齐模型不限语种；项目中也包含英文、中文和数字读音处理逻辑。
 
+## 与原项目的差异
+
+这里的“原项目”主要指上面两个参考项目以及本仓库早期的基础实现。当前版本围绕长音频、混合语种歌词和 Aegisub 后期修轴做了更多工作流补强：
+
+- 使用 `torchaudio` 的 `MMS_FA` 做 forced alignment，并保留可继续编辑的 ASS/LRC 输出流程。
+- 增加英文、中文、数字和自定义英文发音表 `pronunciations.txt` 的处理，方便处理串烧、翻唱合集和混合语种歌词。
+- 增加 `@comment[...]` 注释段，只输出到 ASS，不参与音频对齐，适合标题、间奏提示或台词说明。
+- 增加长音频分块能力：支持 `--chunk_seconds` 自动分块，也支持在 `i.txt` 中用 `@chunk[...]` 手动锚定音频位置。
+- 增加局部重对轴功能：可以从现有 `o.ass` 选中 Aegisub 行号或歌词 Dialogue 行号，只重跑某一句或某一段；选区歌词会优先使用 ASS 中已经修改过的文字。
+- 局部重对轴支持省略 `--realign_time`，程序会自动用选区上一句结束时间和下一句开始时间推导搜索范围；也可以手动指定 `18:35-19:20` 这类时间段。
+- 生成 `o.ass`、`o_rlf.lrc`、`o_ruby.lrc`，兼顾 Aegisub、RhythmicaLyrics 和 NicoKaraMaker3 的后续编辑流程。
+
 ## 工作流程
 
 1. `main.py` 读取命令行参数、`i.wav` 和 `i.txt`。
