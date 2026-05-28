@@ -231,6 +231,16 @@ def parse_realign_time_range(raw_range):
         raise ValueError(f"Invalid audio range: {raw_range}. End time must be after start time.")
     return start_time, end_time
 
+def parse_ass_time_to_seconds(time_str):
+    match = re.match(r'^\s*(\d+):(\d{1,2}):(\d{1,2})(?:\.(\d{1,2}))?\s*$', time_str)
+    if not match:
+        raise ValueError(f"Invalid ASS time value: {time_str}")
+    hours = int(match.group(1))
+    minutes = int(match.group(2))
+    seconds = int(match.group(3))
+    centiseconds = int((match.group(4) or '0').ljust(2, '0')[:2])
+    return hours * 3600 + minutes * 60 + seconds + centiseconds / 100
+
 def format_seconds_for_log(seconds):
     total_centiseconds = int(round(seconds * 100))
     hours = total_centiseconds // 360000
@@ -322,6 +332,38 @@ def select_ass_karaoke_events(events, index_range, range_mode):
     if not selected:
         raise ValueError("The requested ASS range did not contain karaoke Dialogue rows.")
     return selected
+
+def derive_realign_time_range_from_neighbors(events, selected_events):
+    if not selected_events:
+        raise ValueError("Cannot auto-detect time range because no karaoke rows were selected.")
+
+    karaoke_events = [event for event in events if event['is_karaoke']]
+    first_selected = selected_events[0]
+    last_selected = selected_events[-1]
+    first_index = None
+    last_index = None
+    for i, event in enumerate(karaoke_events):
+        if event['line_index'] == first_selected['line_index']:
+            first_index = i
+        if event['line_index'] == last_selected['line_index']:
+            last_index = i
+    if first_index is None or last_index is None:
+        raise ValueError("Unable to locate the selected karaoke row(s).")
+    if first_index == 0:
+        raise ValueError("Cannot auto-detect time range because the selected range starts at the first karaoke row.")
+    if last_index == len(karaoke_events) - 1:
+        raise ValueError("Cannot auto-detect time range because the selected range ends at the last karaoke row.")
+
+    previous_event = karaoke_events[first_index - 1]
+    next_event = karaoke_events[last_index + 1]
+    audio_start = parse_ass_time_to_seconds(previous_event['end'])
+    audio_end = parse_ass_time_to_seconds(next_event['start'])
+    if audio_end <= audio_start:
+        raise ValueError(
+            "Cannot auto-detect a valid time range: previous karaoke end is not before next karaoke start. "
+            "Please pass --realign_time manually."
+        )
+    return audio_start, audio_end, previous_event, next_event
 
 def ass_unescape_text(text):
     return (text
@@ -594,10 +636,20 @@ def run_partial_realign(args, real_io_path, input_audio_path, input_text_path, l
     ass_input_path = resolve_io_path(real_io_path, args.realign_ass)
     ass_output_path = ass_input_path if args.realign_inplace else resolve_io_path(real_io_path, args.realign_output)
     index_range = parse_index_range(args.realign)
-    audio_start, audio_end = parse_realign_time_range(args.realign_time)
 
     ass_lines, ass_events = load_ass_events(ass_input_path)
     selected_events = select_ass_karaoke_events(ass_events, index_range, args.realign_mode)
+    if args.realign_time:
+        audio_start, audio_end = parse_realign_time_range(args.realign_time)
+    else:
+        audio_start, audio_end, previous_event, next_event = derive_realign_time_range_from_neighbors(
+            ass_events,
+            selected_events,
+        )
+        print(
+            "Auto-detected realign range from "
+            f"previous #{previous_event['event_no']} end to next #{next_event['event_no']} start."
+        )
     source_lines = [ass_karaoke_text_to_input_line(event['text']) for event in selected_events]
 
     print(
@@ -692,7 +744,7 @@ def main():
     parser.add_argument('-cs', '--chunk_seconds', type=float, default=0, help='分块推理目标时长，单位：秒。0表示关闭自动分块')
     parser.add_argument('--pronunciation_file', default='pronunciations.txt', help='自定义英文发音表文件名。默认读取输入输出目录下的 pronunciations.txt')
     parser.add_argument('--realign', '--realign_range', dest='realign', default=None, help='局部重对轴的 ASS 行范围，例如 227-245')
-    parser.add_argument('--realign_time', '--realign_audio_range', dest='realign_time', default=None, help='局部重对轴使用的音频时间范围，例如 17:49-18:20 或 00:17:49-00:18:20')
+    parser.add_argument('--realign_time', '--realign_audio_range', dest='realign_time', default=None, help='局部重对轴使用的音频时间范围，例如 17:49-18:20；省略时自动用选区上一句结束到下一句开始')
     parser.add_argument('--realign_ass', default='o.ass', help='局部重对轴读取的 ASS 文件名')
     parser.add_argument('--realign_output', default='o_realign.ass', help='局部重对轴输出的 ASS 文件名')
     parser.add_argument('--realign_mode', choices=('karaoke', 'event'), default='karaoke', help='ASS 范围编号方式：karaoke=歌词 Dialogue 行，event=Aegisub 事件行')
@@ -735,8 +787,8 @@ def main():
     print('Loading files...')
     hn.load_english_pronunciations(pronunciation_path)
     if args.realign or args.realign_time:
-        if not args.realign or not args.realign_time:
-            raise ValueError('Partial realign needs both --realign and --realign_time.')
+        if not args.realign:
+            raise ValueError('Partial realign needs --realign.')
         run_partial_realign(
             args,
             real_io_path,

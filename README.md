@@ -143,7 +143,25 @@ python main.py --chunk_seconds 300
 
 如果已经生成并手动检查过 `o.ass`，但中间某一段轴不准，可以只重跑指定歌词行和指定音频时间段，不必整首重新对齐。
 
-例如重对 `o.ass` 中第 227 到 245 句歌词，并指定这段人声在音频 `18:35` 到 `19:20`：
+可以省略 `--realign_time`，程序会自动使用选区上一句歌词的结束时间和下一句歌词的开始时间作为搜索范围：
+
+``` shell
+python main.py --realign 227
+```
+
+如果这个 `#227` 是 Aegisub 左侧事件列表显示的编号，使用：
+
+``` shell
+python main.py --realign 227 --realign_mode event
+```
+
+多句也可以自动取范围。例如按 Aegisub 左侧事件编号重对 `#244` 到 `#246`，会自动使用 `#243` 的结束时间到 `#247` 的开始时间：
+
+``` shell
+python main.py --realign 244-246 --realign_mode event
+```
+
+也可以手动指定音频时间范围。例如重对 `o.ass` 中第 227 到 245 句歌词，并指定这段人声在音频 `18:35` 到 `19:20`：
 
 ``` shell
 python main.py --realign 227-245 --realign_time 18:35-19:20
@@ -197,7 +215,7 @@ python main.py -h
 | `-cl`, `--characters_per_line` | `0` | 输出文件每行最大字数，`0` 表示不自动切行。 |
 | `-cs`, `--chunk_seconds` | `0` | 自动分块目标时长，`0` 表示关闭自动分块。 |
 | `--realign` | 无 | 局部重对轴的 ASS 行范围，例如 `227-245`。 |
-| `--realign_time` | 无 | 局部重对轴使用的音频时间范围，例如 `18:35-19:20`。 |
+| `--realign_time` | 无 | 局部重对轴使用的音频时间范围，例如 `18:35-19:20`；省略时自动用选区上一句结束到下一句开始。 |
 | `--realign_mode` | `karaoke` | ASS 范围编号方式；`karaoke` 为歌词 Dialogue 行，`event` 为 Aegisub 事件行。 |
 | `--realign_ass` | `o.ass` | 局部重对轴读取的 ASS 文件。 |
 | `--realign_output` | `o_realign.ass` | 局部重对轴输出的 ASS 文件。 |
