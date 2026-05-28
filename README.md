@@ -179,6 +179,12 @@ python main.py --realign 244-246 --realign_mode event
 python main.py --realign 227-245 --realign_time 18:35-19:20
 ```
 
+局部重对轴也支持用 `-v` / `--audio_speedx` 降速推理。数值越小越慢，通常 `0.5` 会比默认更细，但耗时更长：
+
+``` shell
+python main.py --realign 227-245 --realign_time 18:35-19:20 -v 0.5
+```
+
 默认会读取 `o.ass`，输出到 `o_realign.ass`，不会覆盖原文件。`--realign` 默认按 karaoke `Dialogue` 歌词行编号；如果你看到的编号是 Aegisub 事件列表里的行号，改用：
 
 ``` shell
