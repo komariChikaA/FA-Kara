@@ -139,6 +139,42 @@ python main.py --chunk_seconds 300
 - `12:34`
 - `01:02:03`
 
+## 局部重对轴
+
+如果已经生成并手动检查过 `o.ass`，但中间某一段轴不准，可以只重跑指定歌词行和指定音频时间段，不必整首重新对齐。
+
+例如重对 `o.ass` 中第 227 到 245 句歌词，并指定这段人声在音频 `18:35` 到 `19:20`：
+
+``` shell
+python main.py --realign 227-245 --realign_time 18:35-19:20
+```
+
+默认会读取 `o.ass`，输出到 `o_realign.ass`，不会覆盖原文件。`--realign` 默认按 karaoke `Dialogue` 歌词行编号；如果你看到的编号是 Aegisub 事件列表里的行号，改用：
+
+``` shell
+python main.py --realign 227-245 --realign_mode event --realign_time 18:35-19:20
+```
+
+`--realign_time` 支持的时间格式和分块锚点一致，例如：
+
+- `75-90`
+- `18:35-19:20`
+- `00:18:35-00:19:20`
+
+局部重对轴会从选中的 ASS 歌词行提取显示文本并重新生成发音 token。也就是说，如果 `o.ass` 中这几句歌词已经被你改过，程序会优先按 ASS 里的文字重新对齐。成功后如果发现 ASS 歌词和 `i.txt` 对应行不同，会额外写出 `i_realign.txt`，方便把修改同步回歌词文本。
+
+常用覆盖写法：
+
+``` shell
+python main.py --realign 227-245 --realign_time 18:35-19:20 --realign_inplace
+```
+
+如果确认要同时把 ASS 中修改过的歌词同步覆盖回 `i.txt`：
+
+``` shell
+python main.py --realign 227-245 --realign_time 18:35-19:20 --realign_inplace --realign_update_text
+```
+
 ## 常用参数
 
 ``` shell
@@ -160,6 +196,13 @@ python main.py -h
 | `-f`, `--txt_format` | `hrh` | 输入歌词格式。 |
 | `-cl`, `--characters_per_line` | `0` | 输出文件每行最大字数，`0` 表示不自动切行。 |
 | `-cs`, `--chunk_seconds` | `0` | 自动分块目标时长，`0` 表示关闭自动分块。 |
+| `--realign` | 无 | 局部重对轴的 ASS 行范围，例如 `227-245`。 |
+| `--realign_time` | 无 | 局部重对轴使用的音频时间范围，例如 `18:35-19:20`。 |
+| `--realign_mode` | `karaoke` | ASS 范围编号方式；`karaoke` 为歌词 Dialogue 行，`event` 为 Aegisub 事件行。 |
+| `--realign_ass` | `o.ass` | 局部重对轴读取的 ASS 文件。 |
+| `--realign_output` | `o_realign.ass` | 局部重对轴输出的 ASS 文件。 |
+| `--realign_inplace` | 关闭 | 直接覆盖 `--realign_ass` 指定的 ASS 文件。 |
+| `--realign_update_text` | 关闭 | 用选中 ASS 歌词同步覆盖 `i.txt` 对应行。 |
 
 示例：
 
