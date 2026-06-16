@@ -28,6 +28,7 @@ songs/*/*.m4a
 songs/*/*.ogg
 songs/*/*.ass
 songs/*/*.lrc
+songs/*/*.mp4
 
 # Keep checked-in song folder examples and docs
 !songs/*/
