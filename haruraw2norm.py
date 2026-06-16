@@ -52,6 +52,7 @@ except LookupError:
     nltk.download('cmudict')
     cmu_dict = cmudict.dict()
 eng_dic = pyphen.Pyphen(lang='en_US')
+APOSTROPHES = {"'", "’", "‘", "ʼ", "＇"}
 
 newnums = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩',
            '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳',
@@ -148,10 +149,10 @@ def is_english(text):
     return bool(re.match(r'^[a-zA-Z]+$', text))
 
 def is_english_punctuation(char):
-    return char == "'" # in string.punctuation
+    return char in APOSTROPHES # in string.punctuation
 
 def _english_pronunciation_key(word):
-    return ''.join(char for char in word.lower() if char.isalpha() or char == "'").strip("'")
+    return ''.join("'" if char in APOSTROPHES else char for char in word.lower() if char.isalpha() or char in APOSTROPHES).strip("'")
 
 def _split_pronunciation_value(value):
     value = value.strip().lower().replace('-', ' ')

@@ -1,4 +1,35 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local pronunciation overrides
+pronunciations.txt
+**/pronunciations.txt
+
+# Legacy root-level work files
+i.txt
 i_realign.txt
 i.wav
-o_realign.ass
-pronunciations.txt
+i.mp3
+i.flac
+i.m4a
+i.ogg
+o.ass
+o_*.ass
+o_*.lrc
+*_realign.txt
+
+# Per-song work folders
+songs/*/*.txt
+songs/*/*.wav
+songs/*/*.mp3
+songs/*/*.flac
+songs/*/*.m4a
+songs/*/*.ogg
+songs/*/*.ass
+songs/*/*.lrc
+
+# Keep checked-in song folder examples and docs
+!songs/*/
+!songs/*/README.md
+!songs/*/.gitkeep
