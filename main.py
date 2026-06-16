@@ -4,6 +4,8 @@ import librosa
 import numpy as np
 import os
 import re
+import subprocess
+import sys
 import time
 
 import align
@@ -932,6 +934,112 @@ def run_partial_realign(args, real_io_path, input_audio_path, input_text_path, l
     write_synced_text(text_sync_plan)
     print('Success!')
 
+def batch_song_has_input(song_path, pronunciation_file):
+    text_candidates = list_lyric_text_files(song_path, pronunciation_file)
+    preferred_texts = [
+        os.path.join(song_path, f"{get_work_name(song_path)}.txt"),
+        os.path.join(song_path, 'i.txt'),
+    ]
+    has_text = any(os.path.exists(path) for path in preferred_texts) or bool(text_candidates)
+    has_audio = bool(list_audio_files(song_path))
+    return has_text and has_audio
+
+def iter_song_work_dirs(songs_root_path, pronunciation_file):
+    with os.scandir(songs_root_path) as entries:
+        for entry in entries:
+            if not entry.is_dir() or entry.name.startswith('.'):
+                continue
+            song_path = os.path.normpath(entry.path)
+            if batch_song_has_input(song_path, pronunciation_file):
+                yield song_path
+            else:
+                print(f"Skipped {song_path}: no usable lyric/audio pair found.")
+
+def append_arg(command, option, value):
+    command.extend([option, str(value)])
+
+def build_batch_child_command(args, script_path, song_path):
+    command = [sys.executable, '-B', script_path, '-p', song_path]
+    append_arg(command, '-x', args.sokuon_split)
+    append_arg(command, '-n', args.hatsuon_split)
+    append_arg(command, '-v', args.audio_speedx)
+    append_arg(command, '-t', args.tail_correct)
+    append_arg(command, '-tl', args.tail_limit_window)
+    append_arg(command, '-tp', args.tail_thres_pct)
+    append_arg(command, '-tr', args.tail_thres_ratio)
+    append_arg(command, '--offset', args.offset)
+    append_arg(command, '--bpm', args.bpm)
+    append_arg(command, '--bpb', args.bpb)
+    append_arg(command, '--lang', args.lang)
+    append_arg(command, '-f', args.txt_format)
+    append_arg(command, '-cl', args.characters_per_line)
+    append_arg(command, '-cs', args.chunk_seconds)
+    if args.pronunciation_file:
+        append_arg(command, '--pronunciation_file', args.pronunciation_file)
+    return command
+
+def validate_batch_args(args):
+    unsupported = []
+    if args.input_audio:
+        unsupported.append('--input_audio')
+    if args.input_text:
+        unsupported.append('--input_text')
+    if args.output_ass:
+        unsupported.append('--output_ass')
+    if args.output_rlf:
+        unsupported.append('--output_rlf')
+    if args.output_ruby:
+        unsupported.append('--output_ruby')
+    if args.realign or args.realign_time:
+        unsupported.append('--realign/--realign_time')
+    if args.realign_ass:
+        unsupported.append('--realign_ass')
+    if args.realign_output:
+        unsupported.append('--realign_output')
+    if args.realign_text_file:
+        unsupported.append('--realign_text_file')
+    if args.realign_inplace:
+        unsupported.append('--realign_inplace')
+    if args.realign_update_text:
+        unsupported.append('--realign_update_text')
+    if args.realign_text_output:
+        unsupported.append('--realign_text_output')
+    if unsupported:
+        raise ValueError(
+            "Batch songs mode uses each song folder's default files; unsupported options: "
+            + ', '.join(unsupported)
+        )
+
+def run_batch_songs(args, script_dir):
+    validate_batch_args(args)
+    songs_root_value = args.songs_dir or args.path_io or 'songs'
+    songs_root_path = os.path.normpath(songs_root_value) if os.path.isabs(songs_root_value) else os.path.normpath(os.path.join(script_dir, songs_root_value))
+    if not os.path.isdir(songs_root_path):
+        raise FileNotFoundError(f"Songs folder not found: {songs_root_path}")
+
+    print(f"Batch songs folder: {songs_root_path}")
+    processed = 0
+    failed = 0
+    script_path = os.path.realpath(__file__)
+    for song_path in iter_song_work_dirs(songs_root_path, args.pronunciation_file):
+        processed += 1
+        print(f"\n[{processed}] Processing {song_path}")
+        command = build_batch_child_command(args, script_path, song_path)
+        result = subprocess.run(command)
+        if result.returncode:
+            failed += 1
+            print(f"Failed {song_path} with exit code {result.returncode}.")
+            if not args.batch_continue_on_error:
+                raise SystemExit(result.returncode)
+
+    if processed == 0:
+        print("No song folders with both lyric text and audio were found.")
+    elif failed:
+        print(f"Batch finished with {failed}/{processed} failed song(s).")
+        raise SystemExit(1)
+    else:
+        print(f"Batch finished successfully: {processed} song(s).")
+
 def main():
     start_time = time.time()
     script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -957,6 +1065,9 @@ def main():
     parser.add_argument('-cl', '--characters_per_line', type=int, default=0, help='输出文件每行最大字数')
     parser.add_argument('-cs', '--chunk_seconds', type=float, default=0, help='分块推理目标时长，单位：秒。0表示关闭自动分块')
     parser.add_argument('--pronunciation_file', default='pronunciations.txt', help='自定义英文发音表文件名。默认读取本次任务工作文件夹下的 pronunciations.txt')
+    parser.add_argument('--batch_songs', action='store_true', help='顺序处理 songs 目录下的所有歌曲工作文件夹，一次只处理一首')
+    parser.add_argument('--songs_dir', default=None, help='批量处理的歌曲根目录。默认使用 --work_dir；未指定 --work_dir 时使用 songs')
+    parser.add_argument('--batch_continue_on_error', action='store_true', help='批量处理时某首失败后继续处理下一首')
     parser.add_argument('--realign', '--realign_range', dest='realign', default=None, help='局部重对轴的 ASS 行范围，例如 227-245')
     parser.add_argument('--realign_time', '--realign_audio_range', dest='realign_time', default=None, help='局部重对轴使用的音频时间范围，例如 17:49-18:20；省略时自动用选区上一句结束到下一句开始')
     parser.add_argument('--realign_ass', default=None, help='局部重对轴读取的 ASS 文件名。默认使用 --output_ass')
@@ -967,6 +1078,9 @@ def main():
     parser.add_argument('--realign_update_text', action='store_true', help='用选中 ASS 歌词同步覆盖输入歌词对应行')
     parser.add_argument('--realign_text_output', default=None, help='未开启 --realign_update_text 时写出的同步歌词文件名。默认写到 <input_text>_realign.txt')
     args = parser.parse_args()
+    if args.batch_songs:
+        run_batch_songs(args, script_dir)
+        return
 
     sokuon_split = args.sokuon_split
     hatsuon_split = args.hatsuon_split

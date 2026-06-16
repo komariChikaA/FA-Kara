@@ -249,6 +249,39 @@ python main.py --realign 227-245 --realign_time 18:35-19:20 --realign_inplace
 python main.py --realign 227-245 --realign_time 18:35-19:20 --realign_inplace --realign_update_text
 ```
 
+## 批量队列
+
+如果 `songs/` 下有多个歌曲工作文件夹，可以让程序按队列逐首打轴。它不会并行处理，也不会一次性把所有歌曲内容读入内存；父进程只逐个扫描子目录，每首歌会启动一个单独子进程，等这一首完成并释放内存后再处理下一首。
+
+``` shell
+python main.py --batch_songs
+```
+
+默认会扫描项目目录下的 `songs/`。每个子文件夹只要能找到歌词文本和音频，就会按单首工作流处理；例如：
+
+``` txt
+songs/song_a/song_a.txt
+songs/song_a/song_a.wav
+songs/song_b/lyrics.txt
+songs/song_b/vocal.wav
+```
+
+`song_b` 会在开始处理时自动整理成 `song_b.txt` 和 `song_b.wav`，然后输出 `song_b.ass`、`song_b_rlf.lrc`、`song_b_ruby.lrc`。没有音频/歌词配对的目录会被跳过，例如仓库里的 `songs/song_a/README.md` 样例目录。
+
+指定其他歌曲根目录：
+
+``` shell
+python main.py --batch_songs --songs_dir D:\Karaoke\songs
+```
+
+批量模式默认某首失败就停止；如果希望失败后继续下一首：
+
+``` shell
+python main.py --batch_songs --batch_continue_on_error
+```
+
+批量模式会复用音频倍速、分块、语言、尾音等全局参数，但不接受 `-it`、`-ia`、`-o` 和局部重对轴参数；每首歌都使用它自己的工作文件夹默认命名。
+
 ## 常用参数
 
 ``` shell
@@ -277,6 +310,9 @@ python main.py -h
 | `-f`, `--txt_format` | `hrh` | 输入歌词格式。 |
 | `-cl`, `--characters_per_line` | `0` | 输出文件每行最大字数，`0` 表示不自动切行。 |
 | `-cs`, `--chunk_seconds` | `0` | 自动分块目标时长，`0` 表示关闭自动分块。 |
+| `--batch_songs` | 关闭 | 顺序处理 `songs/` 下的所有歌曲工作文件夹，一次只处理一首。 |
+| `--songs_dir` | `songs` | 批量处理的歌曲根目录；也可以用 `--work_dir` 指定。 |
+| `--batch_continue_on_error` | 关闭 | 批量处理时某首失败后继续下一首。 |
 | `--realign` | 无 | 局部重对轴的 ASS 行范围，例如 `227-245`。 |
 | `--realign_time` | 无 | 局部重对轴使用的音频时间范围，例如 `18:35-19:20`；省略时自动用选区上一句结束到下一句开始。 |
 | `--realign_mode` | `karaoke` | ASS 范围编号方式；`karaoke` 为歌词 Dialogue 行，`event` 为 Aegisub 事件行。 |
