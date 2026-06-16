@@ -268,6 +268,18 @@ songs/song_b/vocal.wav
 
 `song_b` 会在开始处理时自动整理成 `song_b.txt` 和 `song_b.wav`，然后输出 `song_b.ass`、`song_b_rlf.lrc`、`song_b_ruby.lrc`。没有音频/歌词配对的目录会被跳过，例如仓库里的 `songs/song_a/README.md` 样例目录。
 
+如果批量处理被中断，直接重新运行同一条命令即可续跑。批量模式默认会跳过已经存在主 ASS 的歌曲文件夹，兼容新命名 `<工作文件夹名>.ass` 和旧命名 `o.ass`：
+
+``` shell
+python main.py --batch_songs
+```
+
+如果确实要重跑已经完成的歌曲：
+
+``` shell
+python main.py --batch_songs --batch_force
+```
+
 指定其他歌曲根目录：
 
 ``` shell
@@ -313,6 +325,7 @@ python main.py -h
 | `--batch_songs` | 关闭 | 顺序处理 `songs/` 下的所有歌曲工作文件夹，一次只处理一首。 |
 | `--songs_dir` | `songs` | 批量处理的歌曲根目录；也可以用 `--work_dir` 指定。 |
 | `--batch_continue_on_error` | 关闭 | 批量处理时某首失败后继续下一首。 |
+| `--batch_force` | 关闭 | 批量处理时不跳过已有 ASS 输出的歌曲文件夹。 |
 | `--realign` | 无 | 局部重对轴的 ASS 行范围，例如 `227-245`。 |
 | `--realign_time` | 无 | 局部重对轴使用的音频时间范围，例如 `18:35-19:20`；省略时自动用选区上一句结束到下一句开始。 |
 | `--realign_mode` | `karaoke` | ASS 范围编号方式；`karaoke` 为歌词 Dialogue 行，`event` 为 Aegisub 事件行。 |

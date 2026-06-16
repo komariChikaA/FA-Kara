@@ -944,12 +944,23 @@ def batch_song_has_input(song_path, pronunciation_file):
     has_audio = bool(list_audio_files(song_path))
     return has_text and has_audio
 
-def iter_song_work_dirs(songs_root_path, pronunciation_file):
+def get_batch_done_ass_path(song_path):
+    for ass_name in (f"{get_work_name(song_path)}.ass", 'o.ass'):
+        ass_path = os.path.join(song_path, ass_name)
+        if os.path.exists(ass_path):
+            return os.path.normpath(ass_path)
+    return None
+
+def iter_song_work_dirs(songs_root_path, pronunciation_file, skip_done=True):
     with os.scandir(songs_root_path) as entries:
         for entry in entries:
             if not entry.is_dir() or entry.name.startswith('.'):
                 continue
             song_path = os.path.normpath(entry.path)
+            done_ass_path = get_batch_done_ass_path(song_path)
+            if skip_done and done_ass_path:
+                print(f"Skipped {song_path}: already has {os.path.basename(done_ass_path)}.")
+                continue
             if batch_song_has_input(song_path, pronunciation_file):
                 yield song_path
             else:
@@ -1021,7 +1032,11 @@ def run_batch_songs(args, script_dir):
     processed = 0
     failed = 0
     script_path = os.path.realpath(__file__)
-    for song_path in iter_song_work_dirs(songs_root_path, args.pronunciation_file):
+    for song_path in iter_song_work_dirs(
+        songs_root_path,
+        args.pronunciation_file,
+        skip_done=not args.batch_force,
+    ):
         processed += 1
         print(f"\n[{processed}] Processing {song_path}")
         command = build_batch_child_command(args, script_path, song_path)
@@ -1033,7 +1048,7 @@ def run_batch_songs(args, script_dir):
                 raise SystemExit(result.returncode)
 
     if processed == 0:
-        print("No song folders with both lyric text and audio were found.")
+        print("No pending song folders with both lyric text and audio were found.")
     elif failed:
         print(f"Batch finished with {failed}/{processed} failed song(s).")
         raise SystemExit(1)
@@ -1068,6 +1083,7 @@ def main():
     parser.add_argument('--batch_songs', action='store_true', help='顺序处理 songs 目录下的所有歌曲工作文件夹，一次只处理一首')
     parser.add_argument('--songs_dir', default=None, help='批量处理的歌曲根目录。默认使用 --work_dir；未指定 --work_dir 时使用 songs')
     parser.add_argument('--batch_continue_on_error', action='store_true', help='批量处理时某首失败后继续处理下一首')
+    parser.add_argument('--batch_force', action='store_true', help='批量处理时不跳过已有 ASS 输出的歌曲文件夹')
     parser.add_argument('--realign', '--realign_range', dest='realign', default=None, help='局部重对轴的 ASS 行范围，例如 227-245')
     parser.add_argument('--realign_time', '--realign_audio_range', dest='realign_time', default=None, help='局部重对轴使用的音频时间范围，例如 17:49-18:20；省略时自动用选区上一句结束到下一句开始')
     parser.add_argument('--realign_ass', default=None, help='局部重对轴读取的 ASS 文件名。默认使用 --output_ass')
