@@ -14,7 +14,7 @@ FA-Kara 是一个面向卡拉 OK 字幕制作的自动打轴工具。它以“�
 - 支持局部重对轴，只重跑 ASS 中指定的一句或一段。
 - 支持批量处理 `songs/` 下所有歌曲工作文件夹。
 - 提供 `prepare_kara_ass.py` 自动准备 Aegisub Karaoke Templater 所需模板行。
-- 提供 `burn_prepared_ass.py` 将 ASS 特效硬压进视频，分辨率不一致时自动按 ASS 分辨率缩放视频。
+- 提供 `burn_prepared_ass.py` 将 ASS 特效硬压进视频；没有视频时也可用单张图片作为背景生成视频。
 - 提供 `concat_generated_videos.py` 按原视频创建时间合并 `_kara` 成片。
 
 ## 推荐工作流
@@ -35,7 +35,7 @@ python main.py -p songs/song_a
 python prepare_kara_ass.py songs/song_a/song_a.ass
 ```
 
-然后在 Aegisub 中打开 `songs/song_a/song_a_prepared.ass`，运行 `Automation > Apply karaoke template` 并保存。确认同文件夹下只有一个源视频后压制：
+然后在 Aegisub 中打开 `songs/song_a/song_a_prepared.ass`，运行 `Automation > Apply karaoke template` 并保存。确认同文件夹下有唯一源视频，或没有视频但有背景图片后压制：
 
 ``` shell
 python burn_prepared_ass.py songs/song_a
@@ -326,6 +326,8 @@ Automation > Apply karaoke template
 
 `burn_prepared_ass.py` 使用 ffmpeg/libass 把 ASS 字幕硬压进同文件夹下的视频。脚本会读取 ASS 的 `PlayResX` / `PlayResY`；如果视频分辨率不同，会先把视频缩放到 ASS 分辨率。
 
+如果歌曲文件夹里没有源视频，但有一张或多张 `jpg` / `png` / `webp` / `bmp` / `tif` 图片，脚本会自动把图片作为背景图生成视频。单张图片会铺满整段；多张图片会按文件名排序，并把总时长平均分给每张图。图片会保持比例并补边到 ASS 分辨率；同文件夹里有唯一音频时会写入音频并使用音频时长，没有音频时使用 ASS 最后一条事件的结束时间。
+
 注意：如果 `*_prepared.ass` 还没有在 Aegisub 中运行过 `Apply karaoke template`，高级模板特效还没有展开。要压最终特效，请先在 Aegisub 中保存展开后的 ASS。
 
 单文件夹压制：
@@ -348,6 +350,13 @@ python burn_prepared_ass.py songs/song_a --audio-mode aac
 python burn_prepared_ass.py songs/song_a --overwrite
 ```
 
+图片背景模式无需额外参数；只要文件夹里没有源视频且有图片，就会自动启用。图片模式默认 30fps：
+
+``` shell
+python burn_prepared_ass.py songs/song_with_cover
+python burn_prepared_ass.py songs/song_with_cover --image-fps 24
+```
+
 批量压制：
 
 ``` shell
@@ -362,7 +371,7 @@ python burn_prepared_ass.py --batch-songs --crf 16 --preset slow --continue-on-e
 python burn_prepared_ass.py songs/song_a --ffmpeg D:\ffmpeg\bin\ffmpeg.exe --ffprobe D:\ffmpeg\bin\ffprobe.exe
 ```
 
-批量模式要求每个歌曲文件夹里有唯一的 `*_prepared.ass` 和唯一的源视频。输出默认为 `原视频名_kara.mp4`。
+批量模式要求每个歌曲文件夹里有唯一的 `*_prepared.ass`，并且有唯一源视频；如果没有源视频，则要求至少有一张背景图片。输出默认为 `源视频名_kara.mp4`；图片模式下按 ASS 名输出，例如 `song_prepared.ass` 会生成 `song_kara.mp4`。如果 MP4 输出遇到 `wav` / `flac` 等不适合直接封装的音频，会自动转成 AAC。
 
 ## 合并成片
 
@@ -437,5 +446,5 @@ python concat_generated_videos.py merged_kara.mp4
 - 长音频建议使用 `--chunk_seconds` 或手动 `@chunk[...]`，不要强行整段一次性对齐。
 - 生成的 ASS 建议先在 Aegisub 中检查和微调。
 - `prepare_kara_ass.py` 只是模板准备，不会替你执行 Aegisub 的 Karaoke Templater。
-- 硬压脚本要求同文件夹源视频唯一；已经生成的 `_kara` 视频会被排除，不会当作源视频。
+- 硬压脚本优先使用同文件夹唯一源视频；没有源视频时可使用一张或多张图片作为背景。已经生成的 `_kara` 视频会被排除，不会当作源视频。
 - 合并脚本默认用 `-c copy`，如果视频参数不一致，使用 `--reencode --audio-mode aac`。
