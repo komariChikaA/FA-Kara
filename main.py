@@ -332,8 +332,8 @@ def rename_work_file(source_path, target_path, label):
 def resolve_default_text_path(active_io_path, pronunciation_file):
     work_name = get_work_name(active_io_path)
     preferred_paths = [
-        os.path.join(active_io_path, f"{work_name}.txt"),
         os.path.join(active_io_path, 'i.txt'),
+        os.path.join(active_io_path, f"{work_name}.txt"),
     ]
     for path in preferred_paths:
         if os.path.exists(path):
@@ -402,6 +402,63 @@ def normalize_default_audio_path(active_io_path, input_audio_path):
     _, ext = os.path.splitext(input_audio_path)
     target_path = os.path.join(active_io_path, f"{get_work_name(active_io_path)}{ext or '.wav'}")
     return rename_work_file(input_audio_path, target_path, 'audio')
+
+def probe_audio_sample_rate(input_audio_path):
+    command = [
+        'ffprobe',
+        '-v',
+        'error',
+        '-select_streams',
+        'a:0',
+        '-show_entries',
+        'stream=sample_rate',
+        '-of',
+        'default=noprint_wrappers=1:nokey=1',
+        input_audio_path,
+    ]
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode:
+        message = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(f"ffprobe failed to inspect audio {input_audio_path}: {message}")
+    try:
+        return int(result.stdout.strip().splitlines()[0])
+    except (IndexError, ValueError) as exc:
+        raise RuntimeError(f"ffprobe did not return a sample rate for {input_audio_path}") from exc
+
+def decode_audio_with_ffmpeg(input_audio_path):
+    sample_rate = probe_audio_sample_rate(input_audio_path)
+    command = [
+        'ffmpeg',
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-i',
+        input_audio_path,
+        '-map',
+        '0:a:0',
+        '-vn',
+        '-ac',
+        '1',
+        '-f',
+        'f32le',
+        '-',
+    ]
+    result = subprocess.run(command, capture_output=True)
+    if result.returncode:
+        message = result.stderr.decode('utf-8', 'replace').strip()
+        raise RuntimeError(f"ffmpeg failed to decode audio {input_audio_path}: {message}")
+    audio = np.frombuffer(result.stdout, dtype=np.float32).copy()
+    if audio.size == 0:
+        raise RuntimeError(f"ffmpeg decoded no audio samples from {input_audio_path}")
+    return audio, sample_rate
+
+def load_audio_file(input_audio_path):
+    try:
+        return decode_audio_with_ffmpeg(input_audio_path)
+    except Exception as exc:
+        print(f"ffmpeg could not decode {input_audio_path}: {exc}")
+        print("Loading audio with librosa fallback...")
+        return librosa.load(input_audio_path, sr=None)
 
 def split_line_ending(line):
     if line.endswith('\r\n'):
@@ -886,7 +943,7 @@ def run_partial_realign(args, real_io_path, input_audio_path, input_text_path, l
             print(f"  {word}=<romaji>")
 
     print('Loading audio...')
-    audio_file, sr = librosa.load(input_audio_path, sr=None)
+    audio_file, sr = load_audio_file(input_audio_path)
     non_silent_ranges = non_silent_recog(audio_file, sr, silent_window_s, tail_thres_pct, tail_thres_ratio)
     realign_ranges = crop_ranges_to_window(non_silent_ranges, audio_start, audio_end)
 
@@ -1084,6 +1141,7 @@ def main():
     parser.add_argument('--songs_dir', default=None, help='批量处理的歌曲根目录。默认使用 --work_dir；未指定 --work_dir 时使用 songs')
     parser.add_argument('--batch_continue_on_error', action='store_true', help='批量处理时某首失败后继续处理下一首')
     parser.add_argument('--batch_force', action='store_true', help='批量处理时不跳过已有 ASS 输出的歌曲文件夹')
+    parser.add_argument('--normalize_work_files', action='store_true', help='将唯一输入歌词和音频改名为工作文件夹同名文件')
     parser.add_argument('--realign', '--realign_range', dest='realign', default=None, help='局部重对轴的 ASS 行范围，例如 227-245')
     parser.add_argument('--realign_time', '--realign_audio_range', dest='realign_time', default=None, help='局部重对轴使用的音频时间范围，例如 17:49-18:20；省略时自动用选区上一句结束到下一句开始')
     parser.add_argument('--realign_ass', default=None, help='局部重对轴读取的 ASS 文件名。默认使用 --output_ass')
@@ -1131,7 +1189,8 @@ def main():
     if not os.path.exists(real_io_path):
         os.makedirs(real_io_path)
     auto_normalize_work_files = (
-        auto_text_path
+        args.normalize_work_files
+        and auto_text_path
         and user_audio_path is None
         and len(list_lyric_text_files(real_io_path, pronunciation_file)) == 1
         and len(list_audio_files(real_io_path)) == 1
@@ -1248,7 +1307,7 @@ def main():
     end_time = time.time()
     print("Lyrics text analysis executed in", round(end_time - start_time, 3), "seconds")
 
-    audio_file, sr = librosa.load(input_audio_path, sr=None) 
+    audio_file, sr = load_audio_file(input_audio_path)
     non_silent_ranges = non_silent_recog(audio_file, sr, silent_window_s, tail_thres_pct, tail_thres_ratio)
 
     use_chunked_alignment = chunk_seconds > 0 or bool(manual_chunk_boundaries)
