@@ -1,4 +1,5 @@
 import argparse
+import shutil
 import subprocess
 import sys
 import uuid
@@ -8,6 +9,7 @@ from burn_prepared_ass import (
     burn_ass,
     default_ass_output_path,
     default_output_path,
+    find_optional_single_audio,
     find_prepared_ass,
     find_source_media,
 )
@@ -116,6 +118,68 @@ def burn_playlist(playlist, args):
         )
 
 
+def normalize_playlist_audio(playlist, temp_dir, args):
+    normalized = []
+
+    for index, item in enumerate(playlist, start=1):
+        input_video = item["output"]
+        if not input_video.is_file():
+            raise FileNotFoundError(f"Cannot normalize audio because generated video is missing: {input_video}")
+
+        normalized_path = temp_dir / f"{index:03d}{input_video.suffix}"
+        command = [
+            args.ffmpeg,
+            "-hide_banner",
+            "-y",
+            "-i",
+            str(input_video),
+        ]
+
+        audio_source = None
+        if item["source_kind"] == "image":
+            audio_source = find_optional_single_audio(item["folder"])
+
+        if audio_source:
+            command.extend(["-i", str(audio_source)])
+            audio_map = ["-map", "1:a:0"]
+            shortest = ["-shortest"]
+            audio_label = audio_source.name
+        else:
+            audio_map = ["-map", "0:a?"]
+            shortest = []
+            audio_label = input_video.name
+
+        command.extend(
+            [
+                "-map",
+                "0:v:0",
+                *audio_map,
+                "-c:v",
+                "copy",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "192k",
+                "-ar",
+                "48000",
+                "-ac",
+                "2",
+                *shortest,
+                "-movflags",
+                "+faststart",
+                str(normalized_path),
+            ]
+        )
+        print(f"[{index:02d}] normalize audio: {item['folder'].name} ({audio_label} -> AAC)")
+        subprocess.run(command, check=True)
+
+        normalized_item = dict(item)
+        normalized_item["output"] = normalized_path
+        normalized.append(normalized_item)
+
+    return normalized
+
+
 def concat_playlist(playlist, output_path, args):
     missing_outputs = [item["output"] for item in playlist if not item["output"].is_file()]
     if missing_outputs:
@@ -127,41 +191,47 @@ def concat_playlist(playlist, output_path, args):
         raise FileExistsError(f"Output already exists: {output_path}. Use --overwrite to replace it.")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    temp_normalized_dir = output_path.parent / f".fa_kara_audio_normalized_{uuid.uuid4().hex}" if args.normalize_audio else None
     list_path = output_path.parent / f".fa_kara_ordered_{uuid.uuid4().hex}.ffconcat"
-    write_concat_list(list_path, playlist)
-    command = [
-        args.ffmpeg,
-        "-hide_banner",
-        "-y" if args.overwrite else "-n",
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        str(list_path),
-    ]
-    if args.reencode:
-        command.extend(
-            [
-                "-c:v",
-                "libx264",
-                "-preset",
-                args.concat_preset,
-                "-crf",
-                str(args.concat_crf),
-                "-pix_fmt",
-                "yuv420p",
-            ]
-        )
-        if args.concat_audio_mode == "copy":
-            command.extend(["-c:a", "copy"])
-        else:
-            command.extend(["-c:a", "aac", "-b:a", "192k"])
-    else:
-        command.extend(["-c", "copy"])
-    command.extend(["-movflags", "+faststart", str(output_path)])
 
     try:
+        if temp_normalized_dir:
+            temp_normalized_dir.mkdir(parents=True, exist_ok=False)
+            playlist = normalize_playlist_audio(playlist, temp_normalized_dir, args)
+
+        write_concat_list(list_path, playlist)
+        command = [
+            args.ffmpeg,
+            "-hide_banner",
+            "-y" if args.overwrite else "-n",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(list_path),
+        ]
+        if args.reencode:
+            command.extend(
+                [
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    args.concat_preset,
+                    "-crf",
+                    str(args.concat_crf),
+                    "-pix_fmt",
+                    "yuv420p",
+                ]
+            )
+            if args.concat_audio_mode == "copy":
+                command.extend(["-c:a", "copy"])
+            else:
+                command.extend(["-c:a", "aac", "-b:a", "192k"])
+        else:
+            command.extend(["-c", "copy"])
+        command.extend(["-movflags", "+faststart", str(output_path)])
+
         subprocess.run(command, check=True)
     finally:
         if not args.keep_list:
@@ -169,6 +239,8 @@ def concat_playlist(playlist, output_path, args):
                 list_path.unlink()
             except FileNotFoundError:
                 pass
+        if temp_normalized_dir:
+            shutil.rmtree(temp_normalized_dir, ignore_errors=True)
 
 
 def main():
@@ -179,11 +251,16 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Only print the resolved order.")
     parser.add_argument("--burn-only", action="store_true", help="Only burn per-song videos.")
     parser.add_argument("--concat-only", action="store_true", help="Only concatenate existing per-song videos.")
+    parser.add_argument(
+        "--normalize-audio",
+        action="store_true",
+        help="Before concatenating, create temporary clips with audio normalized to AAC 48kHz stereo.",
+    )
     parser.add_argument("--ffmpeg", default="ffmpeg")
     parser.add_argument("--ffprobe", default="ffprobe")
     parser.add_argument("--crf", type=int, default=18)
     parser.add_argument("--preset", default="medium")
-    parser.add_argument("--audio-mode", choices=("copy", "aac"), default="copy")
+    parser.add_argument("--audio-mode", choices=("copy", "aac"), default="aac")
     parser.add_argument("--image-fps", type=float, default=30)
     parser.add_argument("--output-ext", default=".mp4")
     parser.add_argument("--overwrite", action="store_true")
@@ -196,6 +273,8 @@ def main():
 
     if args.burn_only and args.concat_only:
         parser.error("--burn-only and --concat-only cannot be used together")
+    if args.burn_only and args.normalize_audio:
+        parser.error("--normalize-audio is only useful when concatenating")
 
     songs_dir = args.songs_dir.resolve()
     if not songs_dir.is_dir():

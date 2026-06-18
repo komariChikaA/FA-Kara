@@ -432,7 +432,7 @@ python concat_generated_videos.py merged_kara.mp4 --ffmpeg D:\ffmpeg\bin\ffmpeg.
 
 如果成片顺序不能按原视频创建时间排，可以使用 `burn_concat_playlist.py`。它读取 `songs/playlist_order.txt`，按文件里的歌曲文件夹名逐首压制并拼接。
 
-`songs/playlist_order.txt` 一行一个歌曲文件夹名，当前歌单最后一首是 `pictorial 日々姫ver`。
+`songs/playlist_order.txt` 一行一个歌曲文件夹名，当前歌单最后一首是 `pictorial 日々姫ver`。固定顺序脚本压制时默认把音频转成 AAC，避免 MP3/AAC 码流直接封进 MP4 后出现静音或 `aac bitstream error`。
 
 预览顺序：
 
@@ -456,6 +456,12 @@ python burn_concat_playlist.py --overwrite --burn-only
 
 ``` shell
 python burn_concat_playlist.py --overwrite --concat-only
+```
+
+如果每首视频已经压好，但各段音频格式不统一，可以在拼接前先生成临时 AAC 音频标准化片段，再按歌单拼接：
+
+``` shell
+python burn_concat_playlist.py --overwrite --concat-only --normalize-audio
 ```
 
 默认输出 `merged_kara_ordered.mp4`。如果直接拼接因为视频参数不一致失败，改用重编码：
@@ -503,4 +509,5 @@ python concat_generated_videos.py merged_kara.mp4
 - 生成的 ASS 建议先在 Aegisub 中检查和微调。
 - `prepare_kara_ass.py` 只是模板准备，不会替你执行 Aegisub 的 Karaoke Templater。
 - 硬压脚本优先使用同文件夹唯一源视频；没有源视频时可使用一张或多张图片作为背景。已经生成的 `_kara` 视频会被排除，不会当作源视频。
+- 图片背景模式使用独立音频输出 MP4 时，`mp3` / `m4a` / `aac` / `wav` / `flac` 等会自动转成 AAC，避免封装后静音。
 - 合并脚本默认用 `-c copy`，如果视频参数不一致，使用 `--reencode --audio-mode aac`。

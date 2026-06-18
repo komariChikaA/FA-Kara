@@ -18,6 +18,7 @@ o.ass
 o_*.ass
 o_*.lrc
 *_realign.txt
+*.mp4
 
 # Per-song work folders
 songs/*/*.txt

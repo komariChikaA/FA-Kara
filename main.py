@@ -26,12 +26,21 @@ AUDIO_EXTENSIONS = ('.wav', '.mp3', '.flac', '.m4a', '.ogg')
 
 def non_silent_recog(audio_file, sr = None, frame_second = 1, threspct = 10, thresrto = .1):
     '识别非静音片段'
-    frame_length = int(sr * frame_second)
-    hop_length = frame_length // 2  # 50% 重叠
-    energy = librosa.feature.rms(y=audio_file, frame_length=frame_length, hop_length=hop_length)[0]
+    if sr is None:
+        raise ValueError("sr is required for non_silent_recog")
+    frame_length = max(1, int(sr * frame_second))
+    hop_length = max(1, frame_length // 2)  # 50% 重叠
+    audio = np.asarray(audio_file, dtype=np.float32)
+    pad_width = frame_length // 2
+    padded = np.pad(audio, (pad_width, pad_width), mode='constant')
+    squared = padded.astype(np.float64, copy=False) ** 2
+    cumulative = np.concatenate(([0.0], np.cumsum(squared)))
+    frame_starts = np.arange(0, len(padded) - frame_length + 1, hop_length)
+    frame_energy = cumulative[frame_starts + frame_length] - cumulative[frame_starts]
+    energy = np.sqrt(frame_energy / frame_length)
     threshold = np.percentile(energy, 100-threspct) * thresrto
     non_silent_frames = energy > threshold
-    times = librosa.frames_to_time(np.arange(len(energy)), sr=sr, hop_length=hop_length) # 转换为时间点
+    times = np.arange(len(energy)) * hop_length / sr # 转换为时间点
     segments = [] # 合并连续片段
     start = None
     for i, (t, active) in enumerate(zip(times, non_silent_frames)):

@@ -43,7 +43,10 @@ AUDIO_EXTENSIONS = {
 
 AUDIO_EXTENSIONS_REQUIRING_AAC_IN_MP4 = {
     ".wav",
+    ".mp3",
     ".flac",
+    ".m4a",
+    ".aac",
     ".ogg",
     ".opus",
     ".aiff",
