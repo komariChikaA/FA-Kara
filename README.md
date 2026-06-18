@@ -14,8 +14,10 @@ FA-Kara 是一个面向卡拉 OK 字幕制作的自动打轴工具。它以“�
 - 支持局部重对轴，只重跑 ASS 中指定的一句或一段。
 - 支持批量处理 `songs/` 下所有歌曲工作文件夹。
 - 提供 `prepare_kara_ass.py` 自动准备 Aegisub Karaoke Templater 所需模板行。
+- 提供 `add_song_intro_ass.py` 给已展开模板的 ASS 添加歌曲片头信息。
 - 提供 `burn_prepared_ass.py` 将 ASS 特效硬压进视频；没有视频时也可用单张图片作为背景生成视频。
 - 提供 `concat_generated_videos.py` 按原视频创建时间合并 `_kara` 成片。
+- 提供 `burn_concat_playlist.py` 按固定歌单顺序批量压制并拼接成片。
 
 ## 推荐工作流
 
@@ -25,8 +27,9 @@ FA-Kara 是一个面向卡拉 OK 字幕制作的自动打轴工具。它以“�
 2. 运行 `main.py` 自动生成基础 ASS/LRC。
 3. 用 `prepare_kara_ass.py` 生成模板准备版 ASS。
 4. 在 Aegisub 中打开准备版 ASS，运行 `Automation > Apply karaoke template`，保存最终特效 ASS。
-5. 用 `burn_prepared_ass.py` 把最终 ASS 硬压进同文件夹视频。
-6. 多首歌都压好后，用 `concat_generated_videos.py` 合并成合集视频。
+5. 需要片头信息时，用 `add_song_intro_ass.py` 给展开后的 ASS 添加歌名/歌手。
+6. 用 `burn_prepared_ass.py` 把最终 ASS 硬压进同文件夹视频。
+7. 多首歌都压好后，用 `concat_generated_videos.py` 或 `burn_concat_playlist.py` 合并成合集视频。
 
 最短示例：
 
@@ -322,6 +325,22 @@ python prepare_kara_ass.py songs/song_a/song_a.ass --in-place
 Automation > Apply karaoke template
 ```
 
+`prepare_kara_ass.py` 补充 `K14` / `K16` 样式时，默认使用 `HGPGothicE` 字体。
+
+## 歌曲片头信息
+
+`add_song_intro_ass.py` 用来给已经展开模板的 ASS 添加开场歌名信息。推荐顺序是先在 Aegisub 中执行并保存 `Automation > Apply karaoke template`，再追加片头，最后压制视频。
+
+批量给 `songs/` 下的 `*_prepared.ass` 添加片头：
+
+``` shell
+python add_song_intro_ass.py --batch-songs --prepared
+```
+
+脚本会添加一个 `SongInfo` 样式和一条 0-5 秒的 `song_intro` 事件，带 600ms 渐入和 600ms 渐出。歌名默认使用歌曲文件夹名；如果同目录媒体文件名里能识别到 `歌：xxx`，会在第二行显示歌手。没有歌手时只显示歌名。
+
+重复运行会先移除已有 `song_intro` 事件再写入，不会叠加多条片头。
+
 ## 硬压字幕到视频
 
 `burn_prepared_ass.py` 使用 ffmpeg/libass 把 ASS 字幕硬压进同文件夹下的视频。脚本会读取 ASS 的 `PlayResX` / `PlayResY`；如果视频分辨率不同，会先把视频缩放到 ASS 分辨率。
@@ -409,6 +428,42 @@ python concat_generated_videos.py merged_kara.mp4 --generated-suffix _kara --gen
 python concat_generated_videos.py merged_kara.mp4 --ffmpeg D:\ffmpeg\bin\ffmpeg.exe
 ```
 
+## 固定顺序压制与合并
+
+如果成片顺序不能按原视频创建时间排，可以使用 `burn_concat_playlist.py`。它读取 `songs/playlist_order.txt`，按文件里的歌曲文件夹名逐首压制并拼接。
+
+`songs/playlist_order.txt` 一行一个歌曲文件夹名，当前歌单最后一首是 `pictorial 日々姫ver`。
+
+预览顺序：
+
+``` shell
+python burn_concat_playlist.py --dry-run
+```
+
+按顺序逐首压制并拼接：
+
+``` shell
+python burn_concat_playlist.py --overwrite
+```
+
+只压制，不拼接：
+
+``` shell
+python burn_concat_playlist.py --overwrite --burn-only
+```
+
+已经压好后只按歌单拼接：
+
+``` shell
+python burn_concat_playlist.py --overwrite --concat-only
+```
+
+默认输出 `merged_kara_ordered.mp4`。如果直接拼接因为视频参数不一致失败，改用重编码：
+
+``` shell
+python burn_concat_playlist.py --overwrite --reencode --concat-audio-mode aac
+```
+
 ## 常见完整命令
 
 单首歌从打轴到压制：
@@ -421,6 +476,7 @@ python prepare_kara_ass.py songs/song_a/song_a.ass
 在 Aegisub 中展开模板并保存后：
 
 ``` shell
+python add_song_intro_ass.py songs/song_a/song_a_prepared.ass
 python burn_prepared_ass.py songs/song_a --crf 16 --preset slow
 ```
 

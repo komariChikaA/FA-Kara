@@ -5,8 +5,8 @@ from pathlib import Path
 
 FALLBACK_STYLES = ("K14", "K16")
 FALLBACK_STYLE_SETTINGS = {
-    "K14": {"alignment": "1", "marginl": "10", "marginr": "5", "marginv": "210"},
-    "K16": {"alignment": "3", "marginl": "5", "marginr": "10", "marginv": "40"},
+    "K14": {"fontname": "HGPGothicE", "alignment": "1", "marginl": "10", "marginr": "5", "marginv": "210"},
+    "K16": {"fontname": "HGPGothicE", "alignment": "3", "marginl": "5", "marginr": "10", "marginv": "40"},
 }
 
 DEFAULT_STYLE_FORMAT = [
