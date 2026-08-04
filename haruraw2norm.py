@@ -570,7 +570,7 @@ def process_haruhi_line(line, lang='jaen', sokuon_split=False, hatsuon_split=Tru
                         pron = kks.convert(ruby_now[:-1])[0]['hepburn'] + pron
                 else:
                     pron = kks.convert(ruby_now)[0]['hepburn']
-                result[i]['pron'] = pron
+                result[i]['pron'] = pron.replace('-', '') # 长音的错误token
             postpron = result[i]['pron']
         
         # 通用读音修正（は，へ）
