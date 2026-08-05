@@ -198,7 +198,7 @@ def main():
         split_long_segments(result_list, max_length=output_characters_per_line)
 
     main_output = process_main(result_list, ruby_tag_offset, bpm, beats_per_bar)
-    ruby_output = process_ruby(result_list)
+    ruby_output = process_ruby_V2(result_list)
     content = f"{main_output}\n{ruby_output}"
     with open(os.path.join(real_io_path, 'o_ruby.lrc'), 'w', encoding='utf-8') as f:
         f.write(content)

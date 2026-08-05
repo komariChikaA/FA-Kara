@@ -219,6 +219,47 @@ def process_ruby(result_list):
 
     return "\n".join(result)
 
+def process_ruby_V2(result_list):
+    ruby_annotations = []
+    i = 0
+
+    while i < len(result_list):
+        item = result_list[i]
+
+        if item['type'] == 2 and item['orig'] != '':
+            ruby1 = item['orig']
+            ruby2 = item['ruby']
+            ruby3 = item['start']
+            first_start_time = parse_time_to_hundredths(item['start'])
+
+            j = i + 1
+            while j < len(result_list) and result_list[j]['type'] == 2 and result_list[j]['orig'] == '':
+                current_item = result_list[j]
+                current_start_time = parse_time_to_hundredths(current_item['start'])
+                time_diff = current_start_time - first_start_time
+                time_diff_str = format_hundredths_to_time_str(time_diff)
+                ruby2 += f"{time_diff_str}{current_item['ruby']}"
+                j += 1
+
+            k = j
+            while k < len(result_list) and 'start' not in result_list[k]:
+                k += 1
+            if k < len(result_list):
+                ruby4 = result_list[k]['start']
+            else:
+                ruby4 = '' # 找不到，留空
+
+            ruby_annotations.append({'ruby1': ruby1, 'ruby2': ruby2, 'ruby3': ruby3, 'ruby4': ruby4})
+            i = j
+        else:
+            i += 1
+
+    result = []
+    for idx, annotation in enumerate(ruby_annotations, 1):
+        result.append(f"@Ruby{idx}={annotation['ruby1']},{annotation['ruby2']},{annotation['ruby3']},{annotation['ruby4']}")
+
+    return "\n".join(result)
+
 def process_rlf(result_list):
     current_line = ""
     last_end = None
