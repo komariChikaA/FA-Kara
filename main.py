@@ -1,5 +1,6 @@
 import argparse
 import bisect
+from functools import partial
 import librosa
 import numpy as np
 import os
@@ -157,9 +158,9 @@ def main():
         if model_name == 'MMS_FA_torch':
             from align import align_audio_with_text
             return align_audio_with_text
-        # if model_name == 'karaoke-ja-Latn':
-        #     from align_hf import align_audio_with_text
-        #     return align_audio_with_text
+        if model_name == 'karaoke-ja-Latn':
+            from align_yohane import align_audio_with_text
+            return partial(align_audio_with_text, hf_model_id='NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn')
         raise ValueError(f"Unsupported FA model: '{model_name}'. ")
 
     align_func = get_align_function(fa_model_select) # TODO: 面向对象方法实现
