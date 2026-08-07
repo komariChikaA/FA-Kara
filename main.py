@@ -6,7 +6,6 @@ import os
 import re
 import time
 
-import align
 # import ass2lrc
 import haruraw2norm as hn
 import lrcfmt
@@ -53,6 +52,8 @@ def main():
     parser.add_argument('--lang', default='auto', help='歌词语言')
     parser.add_argument('-f', '--txt_format', default='hrh', help='歌词文本格式')
     parser.add_argument('-cl', '--characters_per_line', type=int, default=0, help='输出文件每行最大字数')
+    parser.add_argument('--no-gpu', action='store_false', dest='use_gpu', default=True, help='禁用GPU加速')
+    parser.add_argument('-m', '--model', default='mms', help='底层模型选择')
     args = parser.parse_args()
 
     sokuon_split = args.sokuon_split
@@ -71,6 +72,11 @@ def main():
     lrc_language = args.lang.lower()
     txt_format = args.txt_format.lower()
     output_characters_per_line = args.characters_per_line
+    align_use_gpu = True if args.use_gpu else False
+    if args.model in ('mms', 'MMS', 'mms_fa', 'MMS_FA'):
+        fa_model_select = 'MMS_FA_torch'
+    else: # 1
+        fa_model_select = 'karaoke-ja-Latn'
     
     real_io_path = os.path.normpath(user_path) if os.path.isabs(user_path) else os.path.normpath(os.path.join(script_dir, user_path))
     if not os.path.exists(real_io_path):
@@ -146,9 +152,21 @@ def main():
     audio_file, sr = librosa.load(input_audio_path, sr=None) 
     non_silent_ranges = non_silent_recog(audio_file, sr, silent_window_s, tail_thres_pct, tail_thres_ratio)
 
+    def get_align_function(model_name):
+        'Select FA model'
+        if model_name == 'MMS_FA_torch':
+            from align import align_audio_with_text
+            return align_audio_with_text
+        # if model_name == 'karaoke-ja-Latn':
+        #     from align_hf import align_audio_with_text
+        #     return align_audio_with_text
+        raise ValueError(f"Unsupported FA model: '{model_name}'. ")
+
+    align_func = get_align_function(fa_model_select) # TODO: 面向对象方法实现
+
     if audio_speed == 1:
         print('Adding timelines...')
-        alignment_results = align.align_audio_with_text(audio_file, alignment_tokens, non_silent_ranges, sr)
+        alignment_results = align_func(audio_file, alignment_tokens, non_silent_ranges, sr, use_gpu=align_use_gpu)
     else:
         print('Changing the audio speed...')
         start_time = time.time()
@@ -156,7 +174,7 @@ def main():
         end_time = time.time()
         print("Audio speed changing executed in", round(end_time - start_time, 3), "seconds")
         print('Adding timelines...')
-        alignment_results = align.align_audio_with_text(y_processed, alignment_tokens, non_silent_ranges, sr, audio_speed)
+        alignment_results = align_func(y_processed, alignment_tokens, non_silent_ranges, sr, audio_speed, use_gpu=align_use_gpu)
 
     for i, result in enumerate(alignment_results):
         if i in token_to_index_map:
