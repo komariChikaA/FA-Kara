@@ -48,3 +48,21 @@ python main.py -v 0.5 -tl 0.2
 主要使用librosa进行音频预处理，结合Janome、pykakasi、NLTK、Pyphen、PyPinyin标注歌词文本读音，输入基于PyTorch的[MMS_FA](https://arxiv.org/abs/2305.13516)进行推理。
 
 目前的效果尚不尽如人意，欢迎交流。
+
+## 项目结构
+```text
+FA-Kara/
+├── align.py                 # 核心对齐引擎（基座 MMS_FA）
+├── align_yohane.py          # 核心对齐引擎（yohane 微调模型）
+├── ass2lrc.py               # 已弃用，ass转RL特定格式
+├── haruraw2norm.py          # 歌词注音与解析，并转成标准结构
+├── lrcfmt.py                # 非春日向け格式歌词处理
+├── main.py                  # 主程序入口，解析参数并执行对齐流程
+├── norm2ass.py              # 已打轴的标准结构转ass
+├── norm2lrc.py              # 已打轴的标准结构转lrc
+├── utils_audio.py           # 音频辅助函数（librosa 工具）
+├── utils_basic.py           # 基础辅助函数（时间格式转换等简单文本处理）
+├── requirements.txt         # Python 依赖列表参考
+├── i.txt                    # 示例：输入歌词文本文件
+└── i.wav                    # 示例：输入人声音频文件
+```

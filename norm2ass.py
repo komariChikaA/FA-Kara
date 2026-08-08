@@ -1,23 +1,10 @@
 import re
 
+from utils_basic import parse_time_to_hundredths, int2asstime
+
 newnums = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩',
            '⑪', '⑫', '⑬', '⑭', '⑮', '⑯', '⑰', '⑱', '⑲', '⑳',
            '㉑', '㉒', '㉓', '㉔', '㉕', '㉖', '㉗', '㉘', '㉙', '㉚']
-
-def int2asstime(cs: int) -> str:
-    '厘秒整数转换为.ass时轴信息'
-    hours = cs // 360000
-    cs %= 360000
-    minutes = cs // 6000
-    cs %= 6000
-    seconds = cs // 100
-    cs %= 100
-    return f"{hours}:{minutes:02d}:{seconds:02d}.{cs:02d}"
-
-def parse_time_to_hundredths(time_str):
-    match = re.match(r'\[(\d{2}):(\d{2}):(\d{2})\]', time_str)
-    minutes, seconds, hundredths = int(match.group(1)), int(match.group(2)), int(match.group(3))
-    return minutes * 6000 + seconds * 100 + hundredths
 
 def process_norm2assV1(struc, pretime = 20, posttime = 20):
     '模型输出的实际时值，不再维护'

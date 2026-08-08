@@ -1,8 +1,7 @@
 import argparse
-import bisect
+
 from functools import partial
 import librosa
-import numpy as np
 import os
 import re
 import time
@@ -11,27 +10,15 @@ import time
 import haruraw2norm as hn
 import lrcfmt
 import norm2ass
-from norm2lrc import *
-
-def non_silent_recog(audio_file, sr = None, frame_second = 1, threspct = 10, thresrto = .1):
-    '识别非静音片段'
-    frame_length = int(sr * frame_second)
-    hop_length = frame_length // 2  # 50% 重叠
-    energy = librosa.feature.rms(y=audio_file, frame_length=frame_length, hop_length=hop_length)[0]
-    threshold = np.percentile(energy, 100-threspct) * thresrto
-    non_silent_frames = energy > threshold
-    times = librosa.frames_to_time(np.arange(len(energy)), sr=sr, hop_length=hop_length) # 转换为时间点
-    segments = [] # 合并连续片段
-    start = None
-    for i, (t, active) in enumerate(zip(times, non_silent_frames)):
-        if active and start is None:
-            start = max(t-frame_second/4, 0)
-        elif not active and start is not None:
-            segments.append((start, t+frame_second/4))
-            start = None
-    if start is not None:
-        segments.append((start, times[-1]))
-    return segments
+from norm2lrc import process_main, process_ruby_V2, process_rlf
+from utils_audio import (
+    non_silent_recog, time_stretch_audio, func_tail_correct_v250615
+)
+from utils_basic import (
+    split_long_segments,
+    non_silent_head_adjust,
+    func_tail_correct_v250611,
+)
 
 def main():
     start_time = time.time()
@@ -106,33 +93,8 @@ def main():
     if result_list[-1]['orig']!='\n':
         result_list.append({'orig': '\n', 'type': 0, 'pron': ''})
 
-    if tail_correct == 1:
-        for i in range(len(result_list)):
-            if result_list[i]['type']==0:
-                try:
-                    if result_list[i-1].get('pron') and result_list[i-1]['type']!=0:
-                        pre_vowel = result_list[i-1]['pron'][-1]
-                        post_consonant = ''
-                        if i < len(result_list)-1:
-                            post_i = i + 1
-                            while post_i < len(result_list):
-                                if 'pron' in result_list[post_i] and len(result_list[post_i]['pron'])>=1:
-                                    post_consonant = result_list[post_i]['pron'][0]
-                                    break
-                                else:
-                                    post_i += 1
-                        if pre_vowel!=post_consonant and post_consonant not in ('a', 'e', 'i', 'o', 'u'):
-                            result_list[i]['pron'] = pre_vowel + 'h'
-                except:
-                    continue
-    elif tail_correct == 2:
-        for i in range(len(result_list)):
-            if result_list[i]['type']==0:
-                try: # 合理利用baseline尾音特性
-                    if len(result_list[i-1]['pron'])>=1 and result_list[i-1]['type']!=0:
-                        result_list[i]['pron'] = result_list[i-1]['pron'][-1] + 'h'
-                except:
-                    continue
+    if tail_correct in (1, 2): # 不建议使用
+        result_list = func_tail_correct_v250611(result_list, tail_correct)
 
     alignment_tokens = []
     token_to_index_map = {}
@@ -165,17 +127,9 @@ def main():
 
     align_func = get_align_function(fa_model_select) # TODO: 面向对象方法实现
 
-    if audio_speed == 1:
-        print('Adding timelines...')
-        alignment_results = align_func(audio_file, alignment_tokens, non_silent_ranges, sr, use_gpu=align_use_gpu)
-    else:
-        print('Changing the audio speed...')
-        start_time = time.time()
-        y_processed = librosa.effects.time_stretch(audio_file, rate=audio_speed)
-        end_time = time.time()
-        print("Audio speed changing executed in", round(end_time - start_time, 3), "seconds")
-        print('Adding timelines...')
-        alignment_results = align_func(y_processed, alignment_tokens, non_silent_ranges, sr, audio_speed, use_gpu=align_use_gpu)
+    y_processed = time_stretch_audio(audio_file, audio_speed)
+    print('Adding timelines...')
+    alignment_results = align_func(y_processed, alignment_tokens, non_silent_ranges, sr, audio_speed, use_gpu=align_use_gpu)
 
     for i, result in enumerate(alignment_results):
         if i in token_to_index_map:
@@ -186,32 +140,7 @@ def main():
     result_list = non_silent_head_adjust(result_list, non_silent_ranges)
     
     if tail_correct == 3:
-        ns_small = non_silent_recog(audio_file, sr, .02, tail_thres_pct, tail_thres_ratio)
-        ns_ends = [int(np.ceil(ns_end * 100)) for _, ns_end in ns_small]
-        for i in range(len(result_list)-1):
-            if result_list[i]['type'] != 0 and result_list[i+1]['type'] == 0:
-                current_end = parse_time_to_hundredths(result_list[i]['end'])
-                next_ind = i + 2
-                next_start = np.inf
-                while next_ind < len(result_list):
-                    if 'start' in result_list[next_ind]:
-                        next_start = parse_time_to_hundredths(result_list[next_ind]['start'])
-                        break
-                    next_ind += 1
-                left_index = bisect.bisect_left(ns_ends, current_end)
-                right_index = bisect.bisect_left(ns_ends, next_start)
-                if left_index < right_index and left_index < len(ns_ends):
-                    result_list[i]['end'] = format_hundredths_to_time_str(ns_ends[left_index])
-                else:
-                    interval_covered = False # 检查非静音段是否覆盖整个区间
-                    for nss_start, nss_end in ns_small:
-                        if int(nss_start * 100) > current_end:
-                            break
-                        if int(nss_start * 100) <= current_end and int(np.ceil(nss_end * 100)) >= next_start:
-                            interval_covered = True
-                            break
-                    if interval_covered:
-                        result_list[i]['end'] = format_hundredths_to_time_str(max(next_start-2, current_end))
+        result_list = func_tail_correct_v250615(result_list, audio_file, sr, tail_thres_pct, tail_thres_ratio)
     
     if output_characters_per_line > 0:
         split_long_segments(result_list, max_length=output_characters_per_line)
