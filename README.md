@@ -26,7 +26,7 @@ python main.py
 ### 高级选项
 运行指令时还可以添加参数。例如基座模型效果不理想，要使用微调模型，你可以使用如下指令：
 ``` shell
-python main.py -hf 'D:\你的本地模型路径'
+python main.py -t 0 -hf 'D:\你的本地模型路径'
 ```
 方便起见，建议从[Hugging Face官网](https://huggingface.co/NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn)或[镜像站](https://hf-mirror.com/NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn/tree/main)手动下载模型到本地。
 
