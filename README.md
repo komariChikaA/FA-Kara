@@ -24,14 +24,11 @@ python main.py
 - `o_ruby.lrc`: 可直接在NicoKaraMaker3使用，默认提前150ms
 
 ### 高级选项
-运行指令时还可以添加参数。例如一首歌曲的语速偏快，你可以尝试如下指令：
+运行指令时还可以添加参数。例如基座模型效果不理想，要使用微调模型，你可以使用如下指令：
 ``` shell
-python main.py -v 0.5 -tl 0.2
+python main.py -hf 'D:\你的本地模型路径'
 ```
-此时，模型将以0.5倍速[^1]处理音频，并在音频乐句切割时注意到更加精细的静音片段[^2]，这可能有助于提升推理效果。
-
-[^1]: `-v`选项默认值为1，且在使用时无需人工调整时间轴。
-[^2]: `-tl`选项默认值为0.8。简单地理解，脚本在进行乐句切割时会以该值（单位：秒）的一半作为精度来识别静音窗口。
+方便起见，建议从[Hugging Face官网](https://huggingface.co/NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn)或[镜像站](https://hf-mirror.com/NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn/tree/main)手动下载模型到本地。
 
 更多选项请用`-h`查看。
 
@@ -41,7 +38,7 @@ python main.py -v 0.5 -tl 0.2
 如果你从未接触过Python，可按照如下步骤配置环境：
 1. 安装[Python](https://www.python.org/)（推荐版本3.13），并配置好环境变量；
 2. 根据操作系统与GPU情况，安装对应的[PyTorch](https://pytorch.org/get-started/locally/)；
-3. 再安装其他库，如运行指令`pip install janome librosa nltk pykakasi pyphen pypinyin`；
+3. 再安装其他库，如运行指令`pip install janome librosa nltk pykakasi pyphen pypinyin transformers`；
 4. 第一次运行程序时会自动下载模型与字典，这可能需要更多的时间。
 
 ## 模型简介

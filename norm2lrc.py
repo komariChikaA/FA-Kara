@@ -32,7 +32,8 @@ def process_main(result_list, tag_offset=-150, bpm=60, beats_per_bar=3):
         elif item['type'] == 2:
             if item['orig'] != '':
                 current_line += f"{item['start']}{item['orig']}"
-            last_end = item['end']
+            if item.get('end'):
+                last_end = item.get('end')
         elif item['type'] == 0 and item['orig']!='\n' and 'start' not in item:
             if last_end and item['orig'] in (' ', '　'):
                 current_line += last_end+item['orig']
@@ -83,9 +84,12 @@ def process_ruby(result_list):
             j = i + 1
             while j < len(result_list) and result_list[j]['type'] == 2 and result_list[j]['orig'] == '':
                 current_item = result_list[j]
-                current_start_time = parse_time_to_hundredths(current_item['start'])
-                time_diff = current_start_time - first_start_time
-                time_diff_str = format_hundredths_to_time_str(time_diff)
+                if current_item.get('start'):
+                    current_start_time = parse_time_to_hundredths(current_item['start'])
+                    time_diff = current_start_time - first_start_time
+                    time_diff_str = format_hundredths_to_time_str(time_diff)
+                else:
+                    time_diff_str = ''
                 ruby2 += f"{time_diff_str}{current_item['ruby']}"
                 j += 1
 
@@ -121,9 +125,12 @@ def process_ruby_V2(result_list):
             j = i + 1
             while j < len(result_list) and result_list[j]['type'] == 2 and result_list[j]['orig'] == '':
                 current_item = result_list[j]
-                current_start_time = parse_time_to_hundredths(current_item['start'])
-                time_diff = current_start_time - first_start_time
-                time_diff_str = format_hundredths_to_time_str(time_diff)
+                if current_item.get('start'):
+                    current_start_time = parse_time_to_hundredths(current_item['start'])
+                    time_diff = current_start_time - first_start_time
+                    time_diff_str = format_hundredths_to_time_str(time_diff)
+                else:
+                    time_diff_str = ''
                 ruby2 += f"{time_diff_str}{current_item['ruby']}"
                 j += 1
 

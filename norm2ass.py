@@ -91,6 +91,8 @@ def process_norm2assV2(struc, pretime = 20, posttime = 20):
                     zero_str += struc[i+1].get('orig')
                     i += 1
                 asstxt += r'{\k'+str(item_kdur)+'}' + zero_str
+        elif item['type'] == 2 and 'start' not in item:
+            asstxt += item.get('ruby', '')
         else:
             if struc[i+1].get('start'):
                 item_kdur = parse_time_to_hundredths(struc[i+1]['start']) - parse_time_to_hundredths(item['start'])

@@ -1,5 +1,4 @@
 import argparse
-
 from functools import partial
 import librosa
 import os
@@ -41,9 +40,9 @@ def main():
     parser.add_argument('-f', '--txt_format', default='hrh', help='歌词文本格式')
     parser.add_argument('-cl', '--characters_per_line', type=int, default=0, help='输出文件每行最大字数')
     parser.add_argument('--no-gpu', action='store_false', dest='use_gpu', default=True, help='禁用GPU加速')
-    parser.add_argument('-m', '--model', default='mms', help='底层模型选择')
+    parser.add_argument('-m', '--model', type=str.lower, default='mms', choices=['mms', 'yohane'], help='底层模型选择')
+    parser.add_argument('-hf', '--hf_model_path', default=None, help='HuggingFace模型ID或本地路径')
     args = parser.parse_args()
-
     sokuon_split = args.sokuon_split
     hatsuon_split = args.hatsuon_split
     audio_speed = args.audio_speedx
@@ -61,11 +60,15 @@ def main():
     txt_format = args.txt_format.lower()
     output_characters_per_line = args.characters_per_line
     align_use_gpu = True if args.use_gpu else False
-    if args.model in ('mms', 'MMS', 'mms_fa', 'MMS_FA'):
+    hf_model_path = args.hf_model_path
+    if hf_model_path is not None:
+        fa_model_select = 'yohane_hf'
+    elif args.model == 'yohane':
+        fa_model_select = 'yohane_hf'
+        hf_model_path = 'NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn'
+    else:
         fa_model_select = 'MMS_FA_torch'
-    else: # 1
-        fa_model_select = 'karaoke-ja-Latn'
-    
+
     real_io_path = os.path.normpath(user_path) if os.path.isabs(user_path) else os.path.normpath(os.path.join(script_dir, user_path))
     if not os.path.exists(real_io_path):
         os.makedirs(real_io_path)
@@ -120,9 +123,9 @@ def main():
         if model_name == 'MMS_FA_torch':
             from align import align_audio_with_text
             return align_audio_with_text
-        if model_name == 'karaoke-ja-Latn':
+        if model_name == 'yohane_hf':
             from align_yohane import align_audio_with_text
-            return partial(align_audio_with_text, hf_model_id='NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn')
+            return partial(align_audio_with_text, hf_model_id=hf_model_path)
         raise ValueError(f"Unsupported FA model: '{model_name}'. ")
 
     align_func = get_align_function(fa_model_select) # TODO: 面向对象方法实现
