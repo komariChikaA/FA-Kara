@@ -29,7 +29,7 @@ def main():
     parser.add_argument('-p', '--path_io', default='', help='输入输出文件目录。基于主文件所在目录，支持绝对路径或相对路径')
     parser.add_argument('-ia', '--input_audio', default=None, help='输入音频文件名')
     parser.add_argument('-it', '--input_text', default='i.txt', help='输入歌词文件名')
-    parser.add_argument('-t', '--tail_correct', type=int, default=3, help='尾音拖长选项。建议取默认值3')
+    parser.add_argument('-t', '--tail_correct', type=int, default=-999, help='尾音拖长选项')
     parser.add_argument('-tl', '--tail_limit_window', type=float, default=0.8, help='全曲静音检测窗口时长，单位：秒')
     parser.add_argument('-tp', '--tail_thres_pct', type=float, default=10, help='尾音阈值百分位数，单位：％。以音频能量前“百分位数”的一定比例作为静音检测阈值')
     parser.add_argument('-tr', '--tail_thres_ratio', type=float, default=0.1, help='尾音阈值比例。以音频能量前百分位数的一定“比例”作为静音检测阈值')
@@ -42,6 +42,7 @@ def main():
     parser.add_argument('--no-gpu', action='store_false', dest='use_gpu', default=True, help='禁用GPU加速')
     parser.add_argument('-m', '--model', type=str.lower, default='mms', choices=['mms', 'yohane'], help='底层模型选择')
     parser.add_argument('-hf', '--hf_model_path', default=None, help='HuggingFace模型ID或本地路径')
+    parser.add_argument('--head_correct', type=int, default=-999, help='是否进行静音检测')
     args = parser.parse_args()
     sokuon_split = args.sokuon_split
     hatsuon_split = args.hatsuon_split
@@ -50,6 +51,7 @@ def main():
     user_audio_path = args.input_audio
     user_text_path = args.input_text
     tail_correct = args.tail_correct
+    head_correct = args.head_correct
     silent_window_s = args.tail_limit_window
     tail_thres_pct = args.tail_thres_pct
     tail_thres_ratio = args.tail_thres_ratio
@@ -68,6 +70,12 @@ def main():
         hf_model_path = 'NextFire/mms-300m-ForcedAligner-karaoke-ja-Latn'
     else:
         fa_model_select = 'MMS_FA_torch'
+    if fa_model_select == 'MMS_FA_torch':
+        if tail_correct==-999: tail_correct = 3
+        if head_correct==-999: head_correct = 1
+    elif fa_model_select == 'yohane_hf':
+        if tail_correct==-999: tail_correct = 0
+        if head_correct==-999: head_correct = 0
 
     real_io_path = os.path.normpath(user_path) if os.path.isabs(user_path) else os.path.normpath(os.path.join(script_dir, user_path))
     if not os.path.exists(real_io_path):
@@ -117,6 +125,7 @@ def main():
 
     audio_file, sr = librosa.load(input_audio_path, sr=None) 
     non_silent_ranges = non_silent_recog(audio_file, sr, silent_window_s, tail_thres_pct, tail_thres_ratio)
+    if not head_correct: non_silent_ranges = []
 
     def get_align_function(model_name):
         'Select FA model'
