@@ -1053,6 +1053,8 @@ def build_batch_child_command(args, script_path, song_path):
     append_arg(command, '-cs', args.chunk_seconds)
     if args.pronunciation_file:
         append_arg(command, '--pronunciation_file', args.pronunciation_file)
+    if args.normalize_work_files:
+        command.append('--normalize_work_files')
     return command
 
 def validate_batch_args(args):
@@ -1129,8 +1131,8 @@ def main():
     parser.add_argument('-n', '--hatsuon_split', type=int, default=1, help='是否将拨音与前一字符拆开')
     parser.add_argument('-v', '--audio_speedx', type=float, default=1, help='推理时使用的音频倍速')
     parser.add_argument('-p', '--path_io', '--work_dir', default='', help='工作文件夹。基于主文件所在目录，支持绝对路径或相对路径')
-    parser.add_argument('-ia', '--input_audio', default=None, help='输入音频文件名')
-    parser.add_argument('-it', '--input_text', default=None, help='输入歌词文件名。默认自动选择并规范为 <工作文件夹名>.txt')
+    parser.add_argument('-ia', '--input_audio', default=None, help='输入音频文件名。未指定时自动选择同名音频、i.wav/i.mp3 或工作文件夹内唯一音频')
+    parser.add_argument('-it', '--input_text', default=None, help='输入歌词文件名。默认优先 i.txt，其次 <工作文件夹名>.txt 或唯一歌词 txt；加 --normalize_work_files 时才规范为 <工作文件夹名>.txt')
     parser.add_argument('-o', '--output', '--output_ass', dest='output_ass', default=None, help='输出 ASS 文件名。默认 <工作文件夹名>.ass')
     parser.add_argument('--output_rlf', default=None, help='输出 RhythmicaLyrics LRC 文件名。默认 <工作文件夹名>_rlf.lrc')
     parser.add_argument('--output_ruby', default=None, help='输出 ruby LRC 文件名。默认 <工作文件夹名>_ruby.lrc')
@@ -1150,7 +1152,7 @@ def main():
     parser.add_argument('--songs_dir', default=None, help='批量处理的歌曲根目录。默认使用 --work_dir；未指定 --work_dir 时使用 songs')
     parser.add_argument('--batch_continue_on_error', action='store_true', help='批量处理时某首失败后继续处理下一首')
     parser.add_argument('--batch_force', action='store_true', help='批量处理时不跳过已有 ASS 输出的歌曲文件夹')
-    parser.add_argument('--normalize_work_files', action='store_true', help='将唯一输入歌词和音频改名为工作文件夹同名文件')
+    parser.add_argument('--normalize_work_files', action='store_true', help='将唯一输入歌词和音频改名为工作文件夹同名文件。批量模式会把该选项传给每首的子进程')
     parser.add_argument('--realign', '--realign_range', dest='realign', default=None, help='局部重对轴的 ASS 行范围，例如 227-245')
     parser.add_argument('--realign_time', '--realign_audio_range', dest='realign_time', default=None, help='局部重对轴使用的音频时间范围，例如 17:49-18:20；省略时自动用选区上一句结束到下一句开始')
     parser.add_argument('--realign_ass', default=None, help='局部重对轴读取的 ASS 文件名。默认使用 --output_ass')

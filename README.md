@@ -58,8 +58,8 @@ python concat_generated_videos.py merged_kara.mp4
 ``` txt
 songs/
   song_a/
-    song_a.txt
-    song_a.wav
+    i.txt
+    i.wav
     song_a.mp4
   song_b/
     lyrics.txt
@@ -67,7 +67,7 @@ songs/
     source.mp4
 ```
 
-`main.py` 会优先使用工作文件夹里的同名输入。如果文件夹里只有一个歌词 `.txt` 和一个音频文件，也会自动识别，并在运行开始时规范为工作文件夹同名文件。
+`main.py` 找歌词的顺序是：`i.txt`、`<工作文件夹名>.txt`，再退到文件夹内唯一的歌词 txt。音频会先找和歌词同名的文件，再回退到 `i.wav` / `i.mp3`，或文件夹内唯一音频。默认不会改名，这样已经在用的 `i.txt` 不会被改掉。只有显式加上 `--normalize_work_files`，并且文件夹里刚好只有一对歌词和音频时，才会像原项目一样整理成工作文件夹同名文件；如果目标文件名已经存在，程序会停止并提示，不会覆盖。
 
 常见输出：
 
@@ -89,7 +89,7 @@ songs/
 pip install janome librosa nltk pykakasi pyphen pypinyin
 ```
 
-视频压制和合并需要 `ffmpeg` 和 `ffprobe`。如果没有加入 `PATH`，可以在相关脚本里用 `--ffmpeg` / `--ffprobe` 指定路径。
+`main.py` 读音频、以及视频压制和合并，都需要 `ffmpeg` 和 `ffprobe`。读音频时会优先用 ffmpeg 解码 `mp3` / `flac` / `m4a` 等格式，失败再回退到 librosa。如果没有加入 `PATH`，压制和合并脚本可以用 `--ffmpeg` / `--ffprobe` 指定路径。
 
 第一次运行时，程序可能会下载模型或字典，耗时会比较久。
 
@@ -116,8 +116,18 @@ pip install janome librosa nltk pykakasi pyphen pypinyin
 - `[显示文字|romaji]` 用于手动指定读音，适合专名、生造词、英文特殊读法。
 - 普通假名、英文、中文和数字会按项目内置规则转换为发音 token。
 - 空行会作为歌词段落边界。
+- 只有带发音 token 的歌词会进入音频识别；注释段、分块锚点等控制信息不会参与识别。
 - `@comment[...]` 只输出到 ASS，不参与音频识别，也不写入 LRC。
 - `@chunk[...]` 只作为长音频分块锚点，不输出到 ASS/LRC。
+
+注释段用于标题、间奏提示或台词说明。方括号内是显示时长，单位为秒，例如 `@comment[3]`、`@comment[3.0]`、`@comment[3s]`、`@comment[3秒]`。
+
+排时规则：
+
+- 注释段会自动放在前一句歌词段结束之后。
+- 注释段会避开下一句歌词段，不会主动覆盖下一句歌词。
+- 如果到下一句歌词前的空隙不足，程序会自动缩短注释段。
+- 如果完全没有可用空隙，程序会跳过该注释段并在终端打印提示。
 
 注释段示例：
 
@@ -125,6 +135,8 @@ pip install janome librosa nltk pykakasi pyphen pypinyin
 @comment[3] 第一章
 @注释[2.5] 间奏提示
 ```
+
+长音频不建议整段一次性送入 MMS_FA。`--chunk_seconds` 表示每个推理块的目标非静音时长，`300` 大约是每 5 分钟一块；自动分块会按非静音片段切音频，并尽量在歌词行边界切分 token。歌词密度不均匀或长间奏很多时，建议用手动锚点。
 
 分块锚点示例：
 
@@ -135,7 +147,7 @@ pip install janome librosa nltk pykakasi pyphen pypinyin
 第二段歌词从这里之后开始
 ```
 
-支持的时间格式包括 `75`、`75秒`、`12:34`、`01:02:03`。
+`@chunk[12:34]` 表示该行之后的歌词大约从音频 `12:34` 附近开始。支持的时间格式包括 `75`、`75秒`、`12:34`、`01:02:03`。
 
 ## 自定义英文发音
 
@@ -204,27 +216,36 @@ python main.py -p songs/live_song --chunk_seconds 300
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
 | `-p`, `--path_io`, `--work_dir` | 当前项目目录 | 工作文件夹。 |
-| `-it`, `--input_text` | 自动 | 输入歌词文本。 |
-| `-ia`, `--input_audio` | 自动 | 输入人声音频。 |
+| `-it`, `--input_text` | 自动 | 输入歌词文本；未指定时优先 `i.txt`，其次 `<工作文件夹名>.txt` 或唯一歌词 txt。 |
+| `-ia`, `--input_audio` | 自动 | 输入人声音频；未指定时自动选择同名音频、`i.wav`/`i.mp3` 或唯一音频。 |
 | `-o`, `--output_ass` | `<工作文件夹名>.ass` | 输出 ASS。 |
 | `--output_rlf` | `<工作文件夹名>_rlf.lrc` | 输出 RLF LRC。 |
 | `--output_ruby` | `<工作文件夹名>_ruby.lrc` | 输出 ruby LRC。 |
 | `--pronunciation_file` | `pronunciations.txt` | 自定义英文发音表。 |
 | `-v`, `--audio_speedx` | `1` | 推理时的音频倍速。 |
+| `-t`, `--tail_correct` | `3` | 尾音拖长选项。 |
+| `-tl`, `--tail_limit_window` | `0.8` | 全曲静音检测窗口时长，单位为秒。 |
+| `-tp`, `--tail_thres_pct` | `10` | 尾音阈值百分位数。 |
+| `-tr`, `--tail_thres_ratio` | `0.1` | 尾音阈值比例。 |
 | `-cs`, `--chunk_seconds` | `0` | 自动分块目标时长，`0` 表示关闭。 |
 | `-cl`, `--characters_per_line` | `0` | 自动切行字符数，`0` 表示不切。 |
 | `--lang` | `auto` | 歌词语言。 |
 | `--offset` | `-150` | ruby LRC 的 Offset。 |
 | `--bpm` | `60` | 导唱指示灯 BPM。 |
 | `--bpb` | `3` | 导唱指示灯符号个数。 |
+| `--normalize_work_files` | 关闭 | 将唯一歌词和音频改名为工作文件夹同名文件；默认关闭，避免改掉现有 `i.txt`。 |
 
 ## 批量打轴
 
-处理 `songs/` 下所有歌曲文件夹：
+如果 `songs/` 下有多个歌曲工作文件夹，可以按队列逐首打轴。它不会并行处理，也不会一次性把所有歌曲读入内存；父进程只逐个扫描子目录，每首歌会启动一个单独子进程，等这一首完成并释放内存后再处理下一首。
 
 ``` shell
 python main.py --batch_songs
 ```
+
+默认扫描项目目录下的 `songs/`。每个子文件夹只要能找到歌词文本和音频，就会按单首工作流处理。没有音频/歌词配对的目录会被跳过。
+
+如果批量处理被中断，直接重新运行同一条命令即可续跑。批量模式默认会跳过已经存在主 ASS 的歌曲文件夹，兼容新命名 `<工作文件夹名>.ass` 和旧命名 `o.ass`。
 
 失败后继续下一首：
 
@@ -244,10 +265,16 @@ python main.py --batch_songs --batch_force
 python main.py --batch_songs --songs_dir D:\Karaoke\songs
 ```
 
-批量模式会复用全局参数，例如：
+批量模式会复用音频倍速、分块、语言、尾音等全局参数，例如：
 
 ``` shell
 python main.py --batch_songs --chunk_seconds 300 -v 0.5 --batch_continue_on_error
+```
+
+如果要按原项目那样把每首歌的唯一歌词/音频整理成文件夹同名文件：
+
+``` shell
+python main.py --batch_songs --normalize_work_files
 ```
 
 批量模式不接受 `-it`、`-ia`、`-o` 和局部重对轴参数。每首歌都会用自己的工作文件夹默认命名。
@@ -287,6 +314,8 @@ python main.py -p songs/song_a --realign 227-245 --realign_time 18:35-19:20 --re
 ```
 
 如果省略 `--realign_time`，程序会自动用选区上一句结束时间和下一句开始时间推导搜索范围。`--realign_time` 支持 `75-90`、`18:35-19:20`、`00:18:35-00:19:20`。
+
+默认读取 `--output_ass` 指定的 ASS（默认 `<工作文件夹名>.ass`），输出到 `<工作文件夹名>_realign.ass`，不会覆盖原文件。选区歌词会优先使用 ASS 中已经修改过的文字。成功后如果发现 ASS 歌词和输入歌词对应行不同，会额外写出 `<input_text>_realign.txt`。
 
 ## Aegisub 模板准备
 
@@ -506,6 +535,9 @@ python concat_generated_videos.py merged_kara.mp4
 - 输入音频应尽量是干净的人声轨，伴奏残留越少，对齐越稳。
 - 歌词文本要尽量和人声音频一致，漏词、错词、重复段都会影响时间轴。
 - 长音频建议使用 `--chunk_seconds` 或手动 `@chunk[...]`，不要强行整段一次性对齐。
+- 自动分块只是近似策略；对 Live、串烧、长间奏音频，手动锚点通常更可靠。
+- 工作文件夹里如果同时存在 `i.txt` 和 `<歌曲名>.txt`，打轴会优先使用 `i.txt`，避免误用另一份已经改过的歌词。
+- 默认不会把 `i.txt` 改名为歌曲同名文件。需要原项目那种自动规范时，再加 `--normalize_work_files`。
 - 生成的 ASS 建议先在 Aegisub 中检查和微调。
 - `prepare_kara_ass.py` 只是模板准备，不会替你执行 Aegisub 的 Karaoke Templater。
 - 硬压脚本优先使用同文件夹唯一源视频；没有源视频时可使用一张或多张图片作为背景。已经生成的 `_kara` 视频会被排除，不会当作源视频。
